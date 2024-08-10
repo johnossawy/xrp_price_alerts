@@ -1,102 +1,80 @@
-import json  # Make sure to import the JSON module
 import time
+import logging
 from app.twitter import get_twitter_client, post_tweet
 from app.fetcher import fetch_xrp_price
 from app.notifier import create_tweet_text, compare_tweets
-from app.utils import load_last_tweet, save_last_tweet  # Ensure you're importing these if they exist in utils.py
+from app.utils import load_last_tweet, save_last_tweet
 from app.comparisons import ComparisonsGenerator, MessageGenerator
 from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET, LAST_TWEET_FILE
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+
 def get_last_day_price(price_data):
-    """
-    Retrieves the price from 24 hours ago.
-    
-    :param price_data: The current price data dictionary returned by the API.
-    :return: The price from 24 hours ago or None if not available.
-    """
     open_24_price = price_data.get('open_24')
     if open_24_price is None:
-        print("Warning: 'open_24' value is None or not present in the API response.")
+        logging.warning("Warning: 'open_24' value is None or not present in the API response.")
         return None
     try:
         return float(open_24_price)
     except ValueError as e:
-        print(f"Error converting 'open_24' to float: {e}")
+        logging.error(f"Error converting 'open_24' to float: {e}")
         return None
 
+def get_percent_change(old_price, new_price):
+    return ((new_price - old_price) / old_price) * 100
+
 def main():
-    """Main function to run the bot"""
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
     
     comparisons_generator = ComparisonsGenerator()
     message_generator = MessageGenerator(coin_name="Ripple", coin_code="XRP")
+    
+    last_hourly_tweet_time = time.time()
+    last_price = None
 
     while True:
-        print("Fetching price data...")
-        price_data = fetch_xrp_price()
-        if price_data:
-            # Check if 'last' is in price_data and not None
-            current_price_str = price_data.get('last')
-            if current_price_str is None:
-                print("Error: 'last' price is missing in the API response.")
-                time.sleep(3600)
-                continue
-            
-            try:
-                current_price = float(current_price_str)
-            except ValueError as e:
-                print(f"Error converting 'last' to float: {e}")
-                time.sleep(3600)
-                continue
-            
-            # Use the open_24 value to get the last day price
-            last_day_price = get_last_day_price(price_data)
-            
-            if last_day_price is None:
-                print("Skipping tweet due to missing last day price.")
-                time.sleep(3600)
-                continue
+        try:
+            price_data = fetch_xrp_price()
+            if price_data:
+                current_price = float(price_data['last'])
+                last_day_price = get_last_day_price(price_data)
 
-            # Load the last tweet data, including the last hour price
-            last_tweet_data = load_last_tweet()
-            last_hour_price = None
-            if last_tweet_data:
-                last_tweet_text = last_tweet_data.get('text')
-                last_hour_price = last_tweet_data.get('price')
-                if last_hour_price is not None:
-                    try:
-                        comparisons_generator.set_last_tweet_price(float(last_hour_price))
-                    except ValueError as e:
-                        print(f"Error converting last hour price to float: {e}")
-                        comparisons_generator.set_last_tweet_price(None)
-            else:
-                last_tweet_text = None
+                if last_day_price is None:
+                    logging.warning("Skipping tweet due to missing last day price.")
+                    time.sleep(60)
+                    continue
 
-            # Get the hourly and daily comparisons
-            comparisons = comparisons_generator.get_comparisons(current_price, last_day_price)
+                if last_price is not None:
+                    percent_change = get_percent_change(last_price, current_price)
+                    if abs(percent_change) >= 2:  # Check for significant price change
+                        tweet_text = f"The $XRP price is at ${current_price:.2f} right now.\n"
+                        tweet_text += f"{'🟢' if percent_change > 0 else '🔴'} In the last minute, the price has {'increased' if percent_change > 0 else 'decreased'} by ${abs(current_price - last_price):.2f} ({abs(percent_change):.2f}%).\n"
+                        tweet_text += "\n#Ripple #XRP"
+                        
+                        post_tweet(client, tweet_text)
+                        save_last_tweet({'text': tweet_text, 'price': current_price})
+                        logging.info(f"Significant price change tweet posted: {tweet_text}")
 
-            # Add hourly comparison to the tweet
-            if last_hour_price is not None:
-                hourly_comparison = comparisons_generator.get_change(current_price, float(last_hour_price))
-                comparisons.append({
-                    'intro': 'In the last hour,',
-                    'change': hourly_comparison
-                })
+                # Handle hourly tweets
+                if time.time() - last_hourly_tweet_time >= 3600:  # Check if an hour has passed
+                    comparisons = comparisons_generator.get_comparisons(current_price, last_day_price)
+                    tweet_text = message_generator.create_message(current_price, comparisons)
 
-            tweet_text = message_generator.create_message(current_price, comparisons)
+                    post_tweet(client, tweet_text)
+                    save_last_tweet({'text': tweet_text, 'price': current_price})
+                    logging.info(f"Hourly tweet posted: {tweet_text}")
 
-            # Post the tweet if there's a significant change
-            if not last_tweet_text or compare_tweets(tweet_text, last_tweet_text):
-                post_tweet(client, tweet_text)
-                save_last_tweet({'text': tweet_text, 'price': current_price})
-            else:
-                print("No significant change. Skipping tweet.")
-        
-        # Wait for 60 minutes before the next tweet
-        time.sleep(3600)
+                    last_hourly_tweet_time = time.time()
+
+                # Update last price for the next iteration
+                last_price = current_price
+
+            time.sleep(60)  # Sleep for 1 minute before checking again
+
+        except Exception as e:
+            logging.error(f"An error occurred: {e}")
+            time.sleep(60)  # Wait a minute before retrying if an error occurs
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    main()
