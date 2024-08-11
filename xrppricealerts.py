@@ -33,16 +33,19 @@ def generate_hourly_message(last_price, current_price):
     last_price_rounded = round(last_price, 2)
     current_price_rounded = round(current_price, 2)
     
+    # Get the current timestamp
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     if last_price_rounded == current_price_rounded:
         # Price has retained the same value after rounding
-        return f"🔔❗️ $XRP has retained a value of ${current_price_rounded:.2f} over the last hour.\n#Ripple #XRP #XRPPriceAlerts"
+        return f"🔔❗️ $XRP has retained a value of ${current_price_rounded:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
         # Price has changed after rounding, show the percentage change
         percent_change = get_percent_change(last_price, current_price)
         if current_price_rounded > last_price_rounded:
-            return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price_rounded:.2f}!\n#Ripple #XRP #XRPPriceAlerts"
+            return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price_rounded:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
         else:
-            return f"🔔📉 $XRP is DOWN -{abs(percent_change):.2f}% over the last hour to ${current_price_rounded:.2f}!\n#Ripple #XRP #XRPPriceAlerts"
+            return f"🔔📉 $XRP is DOWN -{abs(percent_change):.2f}% over the last hour to ${current_price_rounded:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
 
 def time_until_next_hour():
     """Calculate the number of seconds until the next hour."""
@@ -95,7 +98,7 @@ def main(test_mode=False):
 
                     # Handle significant price changes
                     if abs(percent_change) >= 2:
-                        tweet_text = f"🔔{'📈' if percent_change > 0 else '📉'} $XRP is {'UP' if percent_change > 0 else 'DOWN'} {abs(percent_change):.2f}% to ${current_price_rounded:.2f}!\n#Ripple #XRP #XRPPriceAlerts"
+                        tweet_text = f"🔔{'📈' if percent_change > 0 else '📉'} $XRP is {'UP' if percent_change > 0 else 'DOWN'} {abs(percent_change):.2f}% to ${current_price_rounded:.2f}!\nTime: {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n#Ripple #XRP #XRPPriceAlerts"
                         post_tweet(client, tweet_text)
                         save_last_tweet({'text': tweet_text, 'price': current_price})
                         logging.info(f"Significant price change tweet posted: {tweet_text}")
