@@ -1,5 +1,6 @@
 import time
 import logging
+from datetime import datetime
 from app.twitter import get_twitter_client, post_tweet
 from app.fetcher import fetch_xrp_price
 from app.utils import load_last_tweet, save_last_tweet
@@ -64,10 +65,14 @@ def main(test_mode=False):
                     continue
 
                 if test_mode:
-                    # Post immediately in test mode
-                    tweet_text = f"🚨 Test Post: The $XRP price is at ${current_price:.2f} right now.\n#Ripple #XRP #XRPPriceAlerts"
-                    post_tweet(client, tweet_text)
-                    logging.info(f"Test tweet posted: {tweet_text}")
+                    # Post immediately in test mode with a unique timestamp
+                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    tweet_text = f"🚨 Test Post: The $XRP price is at ${current_price:.2f} right now.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+                    try:
+                        post_tweet(client, tweet_text)
+                        logging.info(f"Test tweet posted: {tweet_text}")
+                    except tweepy.TweepyException as e:
+                        logging.error(f"Tweepy error occurred: {e}")
                     break  # Exit after posting in test mode
 
                 if last_price is not None:
