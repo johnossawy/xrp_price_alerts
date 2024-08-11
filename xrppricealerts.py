@@ -6,8 +6,12 @@ from app.utils import load_last_tweet, save_last_tweet
 from app.comparisons import ComparisonsGenerator, MessageGenerator
 from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with timestamps
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 def get_last_day_price(price_data):
     open_24_price = price_data.get('open_24')
@@ -54,7 +58,7 @@ def main():
 
                 if last_day_price is None:
                     logging.warning("Skipping tweet due to missing last day price.")
-                    time.sleep(60)  # Reduced sleep interval
+                    time.sleep(30)  # Reduced sleep interval
                     continue
 
                 if last_price is not None:
@@ -85,11 +89,11 @@ def main():
                 # Update last price for the next iteration
                 last_price = current_price
 
-            time.sleep(60)  # Reduced sleep interval
+            time.sleep(30)  # Reduced sleep interval
 
         except Exception as e:
             logging.error(f"An error occurred: {e}")
-            time.sleep(60)  # Reduced sleep interval
+            time.sleep(30)  # Reduced sleep interval
 
 if __name__ == "__main__":
     main()
