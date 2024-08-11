@@ -113,4 +113,4 @@ def main(test_mode=False):
 
 if __name__ == "__main__":
     # Set test_mode=True to force an immediate tweet for testing
-    main(test_mode=True)
+    main(test_mode=False)
