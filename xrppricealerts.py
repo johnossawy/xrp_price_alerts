@@ -2,10 +2,9 @@ import time
 import logging
 from app.twitter import get_twitter_client, post_tweet
 from app.fetcher import fetch_xrp_price
-from app.notifier import create_tweet_text, compare_tweets
 from app.utils import load_last_tweet, save_last_tweet
 from app.comparisons import ComparisonsGenerator, MessageGenerator
-from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET, LAST_TWEET_FILE
+from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,11 +23,17 @@ def get_last_day_price(price_data):
 def get_percent_change(old_price, new_price):
     return ((new_price - old_price) / old_price) * 100
 
+def generate_hourly_message(last_price, current_price):
+    percent_change = get_percent_change(last_price, current_price)
+    if percent_change == 0:
+        return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\n#Ripple #XRP #XRPPriceAlerts"
+    elif percent_change > 0:
+        return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\n#Ripple #XRP #XRPPriceAlerts"
+    else:
+        return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\n#Ripple #XRP #XRPPriceAlerts"
+
 def main():
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-    
-    comparisons_generator = ComparisonsGenerator()
-    message_generator = MessageGenerator(coin_name="Ripple", coin_code="XRP")
     
     last_hourly_tweet_time = time.time()
     last_price = None
@@ -58,8 +63,7 @@ def main():
 
                 # Handle hourly tweets
                 if time.time() - last_hourly_tweet_time >= 3600:  # Check if an hour has passed
-                    comparisons = comparisons_generator.get_comparisons(current_price, last_day_price)
-                    tweet_text = message_generator.create_message(current_price, comparisons)
+                    tweet_text = generate_hourly_message(last_price, current_price)
 
                     post_tweet(client, tweet_text)
                     save_last_tweet({'text': tweet_text, 'price': current_price})
