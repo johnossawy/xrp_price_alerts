@@ -35,7 +35,7 @@ def generate_hourly_message(last_price, current_price):
     elif percent_change > 0:
         return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\n#Ripple #XRP #XRPPriceAlerts"
     else:
-        return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\n#Ripple #XRP #XRPPriceAlerts"
+        return f"🔔📉 $XRP is DOWN {percent_change:.2f}% over the last hour to ${current_price:.2f}!\n#Ripple #XRP #XRPPriceAlerts"
 
 def time_until_next_hour():
     """Calculate the number of seconds until the next hour."""
@@ -61,7 +61,7 @@ def main(test_mode=False):
                     logging.warning("Skipping tweet due to missing last day price.")
                     if test_mode:
                         break  # Exit the loop in test mode
-                    time.sleep(30)  # Reduced sleep interval
+                    time.sleep(60)  # Adjusted sleep interval
                     continue
 
                 if test_mode:
@@ -87,6 +87,8 @@ def main(test_mode=False):
                         post_tweet(client, tweet_text)
                         save_last_tweet({'text': tweet_text, 'price': current_price})
                         logging.info(f"Significant price change tweet posted: {tweet_text}")
+                    else:
+                        logging.info(f"Price change of {percent_change:.2f}% detected but below 2% threshold.")
 
                 # Handle hourly tweets
                 time_to_next_hour = time_until_next_hour()
@@ -103,13 +105,13 @@ def main(test_mode=False):
                 # Update last price for the next iteration
                 last_price = current_price
 
-            time.sleep(30)  # Reduced sleep interval
+            time.sleep(60)  # Adjusted sleep interval
 
         except Exception as e:
             logging.error(f"An error occurred: {e}")
             if test_mode:
                 break  # Exit in case of an error in test mode
-            time.sleep(30)  # Reduced sleep interval
+            time.sleep(60)  # Adjusted sleep interval
 
 if __name__ == "__main__":
     # Set test_mode=True to force an immediate tweet for testing
