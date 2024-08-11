@@ -42,7 +42,7 @@ def time_until_next_hour():
     next_hour = (current_time // 3600 + 1) * 3600
     return max(next_hour - current_time, 0)
 
-def main():
+def main(test_mode=False):
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
     
     last_price = None
@@ -58,8 +58,17 @@ def main():
 
                 if last_day_price is None:
                     logging.warning("Skipping tweet due to missing last day price.")
-                    time.sleep(60)  # Reduced sleep interval
+                    if test_mode:
+                        break  # Exit the loop in test mode
+                    time.sleep(30)  # Reduced sleep interval
                     continue
+
+                if test_mode:
+                    # Post immediately in test mode
+                    tweet_text = f"🚨 Test Post: The $XRP price is at ${current_price:.2f} right now.\n#Ripple #XRP #XRPPriceAlerts"
+                    post_tweet(client, tweet_text)
+                    logging.info(f"Test tweet posted: {tweet_text}")
+                    break  # Exit after posting in test mode
 
                 if last_price is not None:
                     percent_change = get_percent_change(last_price, current_price)
@@ -89,11 +98,14 @@ def main():
                 # Update last price for the next iteration
                 last_price = current_price
 
-            time.sleep(60)  # Reduced sleep interval
+            time.sleep(30)  # Reduced sleep interval
 
         except Exception as e:
             logging.error(f"An error occurred: {e}")
-            time.sleep(60)  # Reduced sleep interval
+            if test_mode:
+                break  # Exit in case of an error in test mode
+            time.sleep(30)  # Reduced sleep interval
 
 if __name__ == "__main__":
-    main()
+    # Set test_mode=True to force an immediate tweet for testing
+    main(test_mode=True)
