@@ -96,14 +96,14 @@ def main(test_mode=False):
                     last_price_rounded = round(last_price, 2)
                     current_price_rounded = round(current_price, 2)
 
-                    # Handle significant price changes
+                    # Handle significant price changes (2% or more)
                     if abs(percent_change) >= 2:
                         tweet_text = f"🔔{'📈' if percent_change > 0 else '📉'} $XRP is {'UP' if percent_change > 0 else 'DOWN'} {abs(percent_change):.2f}% to ${current_price_rounded:.2f}!\nTime: {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n#Ripple #XRP #XRPPriceAlerts"
                         post_tweet(client, tweet_text)
                         save_last_tweet({'text': tweet_text, 'price': current_price})
                         logging.info(f"Significant price change tweet posted: {tweet_text}")
                     # Handle hourly tweets only at the top of the hour
-                    elif last_hourly_tweet_time is None or current_time.minute == 0 and current_time.second < 60:
+                    elif (last_hourly_tweet_time is None or last_hourly_tweet_time.hour != current_time.hour) and current_time.minute == 0:
                         tweet_text = generate_hourly_message(last_price, current_price)
                         post_tweet(client, tweet_text)
                         save_last_tweet({'text': tweet_text, 'price': current_price})
