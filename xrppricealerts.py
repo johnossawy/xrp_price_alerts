@@ -5,7 +5,6 @@ from datetime import datetime
 from app.twitter import get_twitter_client, post_tweet
 from app.fetcher import fetch_xrp_price
 from app.utils import load_last_tweet, save_last_tweet
-from app.comparisons import ComparisonsGenerator, MessageGenerator
 from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
 
 logging.basicConfig(
@@ -38,12 +37,12 @@ def generate_hourly_message(last_price, current_price):
     if last_price == current_price:
         # Prices are exactly the same
         return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
-    elif current_price > last_price:
-        # Price has increased
-        return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
-        # Price has decreased
-        return f"🔔📉 $XRP is DOWN -{abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        # Prices have changed
+        if current_price > last_price:
+            return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        else:
+            return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
 
 def main(test_mode=False):
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
@@ -81,20 +80,8 @@ def main(test_mode=False):
                     break
 
                 if last_price is not None:
-                    percent_change = get_percent_change(last_price, current_price)
-                    logging.info(f"Price change since last check: {percent_change:.2f}%")
-                    
-                    last_price_rounded = round(last_price, 2)
-                    current_price_rounded = round(current_price, 2)
-
-                    # Handle significant price changes (2% or more)
-                    if abs(percent_change) >= 2:
-                        tweet_text = f"🔔{'📈' if percent_change > 0 else '📉'} $XRP is {'UP' if percent_change > 0 else 'DOWN'} {abs(percent_change):.2f}% to ${current_price_rounded:.2f}!\nTime: {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n#Ripple #XRP #XRPPriceAlerts"
-                        post_tweet(client, tweet_text)
-                        save_last_tweet({'text': tweet_text, 'price': current_price})
-                        logging.info(f"Significant price change tweet posted: {tweet_text}")
                     # Handle hourly tweets only at the top of the hour
-                    elif (last_hourly_tweet_time is None or last_hourly_tweet_time.hour != current_time.hour) and current_time.minute == 0:
+                    if (last_hourly_tweet_time is None or last_hourly_tweet_time.hour != current_time.hour) and current_time.minute == 0:
                         tweet_text = generate_hourly_message(last_price, current_price)
                         post_tweet(client, tweet_text)
                         save_last_tweet({'text': tweet_text, 'price': current_price})
