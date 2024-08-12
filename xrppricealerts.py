@@ -34,8 +34,8 @@ def generate_hourly_message(last_price, current_price):
     # Calculate the percentage change
     percent_change = get_percent_change(last_price, current_price)
     
-    if last_price == current_price:
-        # Prices are exactly the same
+    if round(last_price, 2) == round(current_price, 2):
+        # Prices are effectively the same
         return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
         # Prices have changed
@@ -87,10 +87,11 @@ def main(test_mode=False):
                     # Handle hourly tweets only at the top of the hour
                     if (last_hourly_tweet_time is None or last_hourly_tweet_time.hour != current_time.hour) and current_time.minute == 0:
                         tweet_text = generate_hourly_message(last_price, current_price)
-                        post_tweet(client, tweet_text)
-                        save_last_tweet({'text': tweet_text, 'price': current_price})
-                        logging.info(f"Hourly tweet posted: {tweet_text}")
-                        last_hourly_tweet_time = current_time
+                        if tweet_text:  # Ensure there's a valid tweet to post
+                            post_tweet(client, tweet_text)
+                            save_last_tweet({'text': tweet_text, 'price': current_price})
+                            logging.info(f"Hourly tweet posted: {tweet_text}")
+                            last_hourly_tweet_time = current_time
 
                 # Trend-based tweets
                 price_window.append(current_price)
