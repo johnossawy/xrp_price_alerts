@@ -34,7 +34,11 @@ def generate_hourly_message(last_price, current_price):
     # Calculate the percentage change
     percent_change = get_percent_change(last_price, current_price)
     
-    if round(last_price, 2) == round(current_price, 2):
+    # Round prices for comparison
+    rounded_last_price = round(last_price, 2)
+    rounded_current_price = round(current_price, 2)
+    
+    if rounded_last_price == rounded_current_price:
         # Prices are effectively the same
         return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
