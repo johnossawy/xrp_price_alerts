@@ -29,18 +29,21 @@ def get_percent_change(old_price, new_price):
     return ((new_price - old_price) / old_price) * 100
 
 def generate_hourly_message(last_price, current_price):
-    last_price_rounded = round(last_price, 2)
-    current_price_rounded = round(current_price, 2)
+    # Get the current timestamp
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    if last_price_rounded == current_price_rounded:
-        return f"🔔❗️ $XRP has retained a value of ${current_price_rounded:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+    # Calculate the percentage change
+    percent_change = get_percent_change(last_price, current_price)
+    
+    if last_price == current_price:
+        # Prices are exactly the same
+        return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+    elif current_price > last_price:
+        # Price has increased
+        return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
-        percent_change = get_percent_change(last_price, current_price)
-        if current_price_rounded > last_price_rounded:
-            return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price_rounded:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
-        else:
-            return f"🔔📉 $XRP is DOWN -{abs(percent_change):.2f}% over the last hour to ${current_price_rounded:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        # Price has decreased
+        return f"🔔📉 $XRP is DOWN -{abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
 
 def main(test_mode=False):
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
