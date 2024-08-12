@@ -58,6 +58,10 @@ def main(test_mode=False):
                 current_price = float(price_data['last'])
                 logging.info(f"Checked price: ${current_price:.2f}")
                 
+                if last_price is not None:
+                    percent_change = get_percent_change(last_price, current_price)
+                    logging.info(f"Price change since last check: {percent_change:.2f}%")
+                
                 last_day_price = get_last_day_price(price_data)
 
                 if last_day_price is None:
