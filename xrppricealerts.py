@@ -25,7 +25,8 @@ def get_last_day_price(price_data):
         return None
 
 def get_percent_change(old_price, new_price):
-    return ((new_price - old_price) / old_price) * 100
+    # Calculate the percentage change
+    return ((new_price - old_price) / old_price) * 100 if old_price != 0 else 0
 
 def generate_hourly_message(last_price, current_price):
     # Get the current timestamp
@@ -34,6 +35,9 @@ def generate_hourly_message(last_price, current_price):
     # Calculate the percentage change
     percent_change = get_percent_change(last_price, current_price)
     
+    # Debug logging
+    print(f"DEBUG - Last Price: {last_price}, Current Price: {current_price}, Percent Change: {percent_change:.2f}%")
+
     # Round prices for comparison
     rounded_last_price = round(last_price, 2)
     rounded_current_price = round(current_price, 2)
