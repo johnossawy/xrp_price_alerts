@@ -25,28 +25,18 @@ def get_last_day_price(price_data):
         return None
 
 def get_percent_change(old_price, new_price):
-    # Calculate the percentage change
     return ((new_price - old_price) / old_price) * 100 if old_price != 0 else 0
 
 def generate_hourly_message(last_price, current_price):
-    # Get the current timestamp
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    # Calculate the percentage change
     percent_change = get_percent_change(last_price, current_price)
     
     # Debug logging
-    print(f"DEBUG - Last Price: {last_price}, Current Price: {current_price}, Percent Change: {percent_change:.2f}%")
+    logging.debug(f"DEBUG - Last Price: {last_price}, Current Price: {current_price}, Percent Change: {percent_change:.2f}%")
 
-    # Round prices for comparison
-    rounded_last_price = round(last_price, 2)
-    rounded_current_price = round(current_price, 2)
-    
-    if rounded_last_price == rounded_current_price:
-        # Prices are effectively the same
+    if current_price == last_price:
         return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
-        # Prices have changed
         if current_price > last_price:
             return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
         else:
@@ -56,8 +46,8 @@ def main(test_mode=False):
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
     
     last_price = None
-    last_hourly_tweet_time = None  # Track when the last hourly tweet was posted
-    price_window = deque(maxlen=10)  # Track the last 10 checks for trend analysis
+    last_hourly_tweet_time = None
+    price_window = deque(maxlen=10)
 
     while True:
         try:
@@ -75,7 +65,7 @@ def main(test_mode=False):
                 if last_day_price is None:
                     logging.warning("Skipping tweet due to missing last day price.")
                     if test_mode:
-                        break  # Exit the loop in test mode
+                        break
                     time.sleep(60)
                     continue
 
@@ -92,16 +82,14 @@ def main(test_mode=False):
                     break
 
                 if last_price is not None:
-                    # Handle hourly tweets only at the top of the hour
                     if (last_hourly_tweet_time is None or last_hourly_tweet_time.hour != current_time.hour) and current_time.minute == 0:
                         tweet_text = generate_hourly_message(last_price, current_price)
-                        if tweet_text:  # Ensure there's a valid tweet to post
+                        if tweet_text:
                             post_tweet(client, tweet_text)
                             save_last_tweet({'text': tweet_text, 'price': current_price})
                             logging.info(f"Hourly tweet posted: {tweet_text}")
                             last_hourly_tweet_time = current_time
 
-                # Trend-based tweets
                 price_window.append(current_price)
                 if len(price_window) == price_window.maxlen:
                     initial_price = price_window[0]
@@ -111,10 +99,8 @@ def main(test_mode=False):
                         tweet_text = f"🔔📈 $XRP is {direction} {abs(trend_percent_change):.2f}% over the last {len(price_window)} minutes to ${current_price:.2f}!\nTime: {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n#Ripple #XRP #XRPPriceAlerts"
                         post_tweet(client, tweet_text)
                         logging.info(f"Trend tweet posted: {tweet_text}")
-                    # Reset the price window for the next trend check
                     price_window.clear()
 
-                # Update last price for the next iteration
                 last_price = current_price
 
             time.sleep(60)
