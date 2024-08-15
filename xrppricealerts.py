@@ -1,10 +1,8 @@
-from collections import deque
 import time
 import logging
 from datetime import datetime
 from app.twitter import get_twitter_client, post_tweet
 from app.fetcher import fetch_xrp_price
-from app.utils import load_last_tweet, save_last_tweet
 from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
 
 logging.basicConfig(
@@ -13,103 +11,39 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-def get_last_day_price(price_data):
-    open_24_price = price_data.get('open_24')
-    if open_24_price is None:
-        logging.warning("Warning: 'open_24' value is None or not present in the API response.")
-        return None
-    try:
-        return float(open_24_price)
-    except ValueError as e:
-        logging.error(f"Error converting 'open_24' to float: {e}")
-        return None
-
-def get_percent_change(old_price, new_price):
-    return ((new_price - old_price) / old_price) * 100 if old_price != 0 else 0
-
-def generate_hourly_message(last_price, current_price):
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    percent_change = get_percent_change(last_price, current_price)
-    
-    # Debug logging
-    logging.debug(f"DEBUG - Last Price: {last_price}, Current Price: {current_price}, Percent Change: {percent_change:.2f}%")
-
-    if current_price == last_price:
-        return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
-    else:
-        if current_price > last_price:
-            return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
-        else:
-            return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
-
-def main(test_mode=False):
+def main():
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-    
-    last_price = None
-    last_hourly_tweet_time = None
-    price_window = deque(maxlen=10)
+    last_tweet_hour = None
 
     while True:
         try:
-            price_data = fetch_xrp_price()
-            if price_data:
-                current_price = float(price_data['last'])
-                logging.info(f"Checked price: ${current_price:.2f}")
+            current_time = datetime.now()
+            current_hour = current_time.hour
+
+            # Check if an hour has passed since the last tweet
+            if last_tweet_hour != current_hour:
+                price_data = fetch_xrp_price()
                 
-                if last_price is not None:
-                    percent_change = get_percent_change(last_price, current_price)
-                    logging.info(f"Price change since last check: {percent_change:.2f}%")
-                
-                last_day_price = get_last_day_price(price_data)
-
-                if last_day_price is None:
-                    logging.warning("Skipping tweet due to missing last day price.")
-                    if test_mode:
-                        break
-                    time.sleep(60)
-                    continue
-
-                current_time = datetime.now()
-
-                if test_mode:
+                if price_data and 'last' in price_data:
+                    current_price = float(price_data['last'])
                     timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
-                    tweet_text = f"🚨 Test Post: The $XRP price is at ${current_price:.2f} right now.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+                    tweet_text = f"🔔 Current $XRP price: ${current_price:.2f}\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+
                     try:
                         post_tweet(client, tweet_text)
-                        logging.info(f"Test tweet posted: {tweet_text}")
-                    except tweepy.TweepyException as e:
-                        logging.error(f"Tweepy error occurred: {e}")
-                    break
-
-                if last_price is not None:
-                    if (last_hourly_tweet_time is None or last_hourly_tweet_time.hour != current_time.hour) and current_time.minute == 0:
-                        tweet_text = generate_hourly_message(last_price, current_price)
-                        if tweet_text:
-                            post_tweet(client, tweet_text)
-                            save_last_tweet({'text': tweet_text, 'price': current_price})
-                            logging.info(f"Hourly tweet posted: {tweet_text}")
-                            last_hourly_tweet_time = current_time
-
-                price_window.append(current_price)
-                if len(price_window) == price_window.maxlen:
-                    initial_price = price_window[0]
-                    trend_percent_change = get_percent_change(initial_price, current_price)
-                    if abs(trend_percent_change) >= 2:
-                        direction = "UP" if trend_percent_change > 0 else "DOWN"
-                        tweet_text = f"🔔📈 $XRP is {direction} {abs(trend_percent_change):.2f}% over the last {len(price_window)} minutes to ${current_price:.2f}!\nTime: {current_time.strftime('%Y-%m-%d %H:%M:%S')}\n#Ripple #XRP #XRPPriceAlerts"
-                        post_tweet(client, tweet_text)
-                        logging.info(f"Trend tweet posted: {tweet_text}")
-                    price_window.clear()
-
-                last_price = current_price
-
+                        logging.info(f"Tweet posted: {tweet_text}")
+                        last_tweet_hour = current_hour
+                    except Exception as e:
+                        logging.error(f"Error posting tweet: {e}")
+                else:
+                    logging.warning("Failed to fetch price data.")
+            
+            # Sleep for a minute before checking again
             time.sleep(60)
 
         except Exception as e:
             logging.error(f"An error occurred: {e}")
-            if test_mode:
-                break
             time.sleep(60)
 
 if __name__ == "__main__":
-    main(test_mode=False)
+    main()
