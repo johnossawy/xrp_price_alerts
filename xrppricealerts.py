@@ -34,9 +34,9 @@ def generate_message(last_price, current_price):
     elif current_price == last_price:
         return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     elif current_price > last_price:
-        return f"🔔📈 $XRP is UP {get_percent_change(last_price, current_price):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
-        return f"🔔📉 $XRP is DOWN {abs(get_percent_change(last_price, current_price)):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
 
 def append_to_csv(timestamp, price, percent_change=None):
     """Append price data to a CSV file."""
@@ -46,18 +46,10 @@ def append_to_csv(timestamp, price, percent_change=None):
             csv_writer.writerow(['timestamp', 'price', 'percent_change'])
         csv_writer.writerow([timestamp, price, percent_change])
 
-def log_full_price_data():
-    """Log full XRP price data to the log file."""
-    price_data = fetch_xrp_price()
-    if price_data:
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        logging.info(f"Full price data fetched at {timestamp}: {price_data}")
-
 def main():
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
     last_price = None
     last_tweet_hour = None
-    last_log_time = None
 
     while True:
         try:
@@ -70,7 +62,7 @@ def main():
                 
                 if price_data and 'last' in price_data:
                     current_price = round(float(price_data['last']), 2)
-
+                    
                     if last_price is not None:
                         tweet_text = generate_message(last_price, current_price)
 
@@ -88,24 +80,11 @@ def main():
                 else:
                     logging.warning("Failed to fetch price data.")
             
-            # Log full price data every 2 minutes
-            if last_log_time is None:
-                logging.info("Initializing last_log_time.")
-                log_full_price_data()
-                last_log_time = current_time
-            elif (current_time - last_log_time).total_seconds() >= 120:
-                log_full_price_data()
-                last_log_time = current_time
-
             # Sleep for a minute before checking again
             time.sleep(60)
 
         except Exception as e:
             logging.error(f"An error occurred: {e}")
-            # Log the types of variables involved in the error for debugging
-            logging.error(f"Type of last_price: {type(last_price)}")
-            logging.error(f"Type of last_tweet_hour: {type(last_tweet_hour)}")
-            logging.error(f"Type of last_log_time: {type(last_log_time)}")
             time.sleep(60)
 
 if __name__ == "__main__":
