@@ -34,9 +34,9 @@ def generate_message(last_price, current_price):
     elif current_price == last_price:
         return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     elif current_price > last_price:
-        return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        return f"🔔📈 $XRP is UP {get_percent_change(last_price, current_price):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
-        return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        return f"🔔📉 $XRP is DOWN {abs(get_percent_change(last_price, current_price)):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
 
 def append_to_csv(timestamp, price, percent_change=None):
     """Append price data to a CSV file."""
@@ -63,7 +63,6 @@ def main():
         try:
             current_time = datetime.now()
             current_hour = current_time.hour
-            current_minute = current_time.minute
 
             # Check if an hour has passed since the last tweet
             if last_tweet_hour != current_hour:
