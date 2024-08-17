@@ -70,7 +70,7 @@ def main():
                 
                 if price_data and 'last' in price_data:
                     current_price = round(float(price_data['last']), 2)
-                    
+
                     if last_price is not None:
                         tweet_text = generate_message(last_price, current_price)
 
@@ -89,7 +89,11 @@ def main():
                     logging.warning("Failed to fetch price data.")
             
             # Log full price data every 2 minutes
-            if last_log_time is None or (current_time - last_log_time).total_seconds() >= 120:
+            if last_log_time is None:
+                logging.info("Initializing last_log_time.")
+                log_full_price_data()
+                last_log_time = current_time
+            elif (current_time - last_log_time).total_seconds() >= 120:
                 log_full_price_data()
                 last_log_time = current_time
 
@@ -98,6 +102,10 @@ def main():
 
         except Exception as e:
             logging.error(f"An error occurred: {e}")
+            # Log the types of variables involved in the error for debugging
+            logging.error(f"Type of last_price: {type(last_price)}")
+            logging.error(f"Type of last_tweet_hour: {type(last_tweet_hour)}")
+            logging.error(f"Type of last_log_time: {type(last_log_time)}")
             time.sleep(60)
 
 if __name__ == "__main__":
