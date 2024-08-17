@@ -19,6 +19,9 @@ ALL_TIME_HIGH_PRICE = 3.65
 # Define the volatility threshold
 VOLATILITY_THRESHOLD = 0.02
 
+# Define the threshold for hourly price change
+HOURLY_CHANGE_THRESHOLD = 0.01
+
 # Define the CSV file for storing price data
 CSV_FILE = 'xrp_price_data.csv'
 
@@ -29,18 +32,21 @@ def generate_message(last_price, current_price, is_volatility_alert=False):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     percent_change = get_percent_change(last_price, current_price)
 
+    # Round the price to 2 decimal places for the tweets
+    rounded_current_price = round(current_price, 2)
+
     if current_price > ALL_TIME_HIGH_PRICE:
-        return f"🚀🔥 $XRP just shattered its all-time high, now at an incredible ${current_price:.2f}!!! 🚀🔥\nTime: {timestamp}\n#Ripple #XRP #XRPATH #ToTheMoon"
+        return f"🚀🔥 $XRP just shattered its all-time high, now at an incredible ${rounded_current_price:.2f}!!! 🚀🔥\nTime: {timestamp}\n#Ripple #XRP #XRPATH #ToTheMoon"
     elif is_volatility_alert:
         direction = "UP" if current_price > last_price else "DOWN"
         emoji = "📈" if direction == "UP" else "📉"
-        return f"⚡️ $XRP is experiencing volatility! It's {direction} by {abs(percent_change):.2f}% to ${current_price:.2f} {emoji}\nTime: {timestamp}\n#Ripple #XRP #XRPVolatility"
-    elif current_price == last_price:
-        return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        return f"⚡️ $XRP is experiencing volatility! It's {direction} by {abs(percent_change):.2f}% to ${rounded_current_price:.2f} {emoji}\nTime: {timestamp}\n#Ripple #XRP #XRPVolatility"
+    elif abs(current_price - last_price) < HOURLY_CHANGE_THRESHOLD:
+        return f"🔔❗️ $XRP has retained a value of ${rounded_current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     elif current_price > last_price:
-        return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${rounded_current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
-        return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${rounded_current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
 
 def append_to_csv(timestamp, price, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
@@ -66,7 +72,7 @@ def main():
                 price_data = fetch_xrp_price()
                 
                 if price_data and 'last' in price_data:
-                    current_price = round(float(price_data['last']), 2)
+                    current_price = float(price_data['last'])
                     
                     if last_price is not None:
                         tweet_text = generate_message(last_price, current_price)
@@ -88,7 +94,7 @@ def main():
                 price_data = fetch_xrp_price()
                 
                 if price_data and 'last' in price_data:
-                    current_price = round(float(price_data['last']), 2)
+                    current_price = float(price_data['last'])
                     percent_change = get_percent_change(last_checked_price, current_price)
                     
                     if abs(current_price - last_checked_price) > VOLATILITY_THRESHOLD:
