@@ -46,15 +46,24 @@ def append_to_csv(timestamp, price, percent_change=None):
             csv_writer.writerow(['timestamp', 'price', 'percent_change'])
         csv_writer.writerow([timestamp, price, percent_change])
 
+def log_full_price_data():
+    """Log full XRP price data to the log file."""
+    price_data = fetch_xrp_price()
+    if price_data:
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        logging.info(f"Full price data fetched at {timestamp}: {price_data}")
+
 def main():
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
     last_price = None
     last_tweet_hour = None
+    last_log_time = None
 
     while True:
         try:
             current_time = datetime.now()
             current_hour = current_time.hour
+            current_minute = current_time.minute
 
             # Check if an hour has passed since the last tweet
             if last_tweet_hour != current_hour:
@@ -80,6 +89,11 @@ def main():
                 else:
                     logging.warning("Failed to fetch price data.")
             
+            # Log full price data every 2 minutes
+            if last_log_time is None or (current_time - last_log_time).total_seconds() >= 120:
+                log_full_price_data()
+                last_log_time = current_time
+
             # Sleep for a minute before checking again
             time.sleep(60)
 
