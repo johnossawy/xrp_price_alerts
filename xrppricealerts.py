@@ -1,11 +1,13 @@
 import time
 import logging
+import csv
 from datetime import datetime
 from app.twitter import get_twitter_client, post_tweet
 from app.fetcher import fetch_xrp_price
 from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
 
 logging.basicConfig(
+    filename='xrp_bot.log',
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
@@ -16,6 +18,9 @@ ALL_TIME_HIGH_PRICE = 3.65
 
 # Define the volatility threshold
 VOLATILITY_THRESHOLD = 0.02
+
+# Define the CSV file for storing price data
+CSV_FILE = 'xrp_price_data.csv'
 
 def get_percent_change(old_price, new_price):
     return ((new_price - old_price) / old_price) * 100 if old_price != 0 else 0
@@ -37,6 +42,13 @@ def generate_message(last_price, current_price, is_volatility_alert=False):
     else:
         return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
 
+def append_to_csv(timestamp, price, percent_change=None):
+    with open(CSV_FILE, 'a', newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        if csvfile.tell() == 0:  # If file is empty, write the header
+            csv_writer.writerow(['timestamp', 'price', 'percent_change'])
+        csv_writer.writerow([timestamp, price, percent_change])
+
 def main():
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
     last_price = None
@@ -47,6 +59,7 @@ def main():
         try:
             current_time = datetime.now()
             current_hour = current_time.hour
+            timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
 
             # Check if an hour has passed since the last tweet
             if last_tweet_hour != current_hour:
@@ -65,6 +78,7 @@ def main():
                         except Exception as e:
                             logging.error(f"Error posting tweet: {e}")
 
+                    append_to_csv(timestamp, current_price)
                     last_price = current_price
                 else:
                     logging.warning("Failed to fetch price data.")
@@ -75,6 +89,7 @@ def main():
                 
                 if price_data and 'last' in price_data:
                     current_price = round(float(price_data['last']), 2)
+                    percent_change = get_percent_change(last_checked_price, current_price)
                     
                     if abs(current_price - last_checked_price) > VOLATILITY_THRESHOLD:
                         tweet_text = generate_message(last_checked_price, current_price, is_volatility_alert=True)
@@ -85,6 +100,7 @@ def main():
                         except Exception as e:
                             logging.error(f"Error posting volatility alert tweet: {e}")
 
+                    append_to_csv(timestamp, current_price, percent_change)
                     last_checked_price = current_price
 
             else:
