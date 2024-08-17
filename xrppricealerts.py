@@ -11,6 +11,9 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+# Define the All-Time High (ATH) price
+ALL_TIME_HIGH_PRICE = 3.65
+
 def get_percent_change(old_price, new_price):
     return ((new_price - old_price) / old_price) * 100 if old_price != 0 else 0
 
@@ -18,7 +21,9 @@ def generate_message(last_price, current_price):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     percent_change = get_percent_change(last_price, current_price)
 
-    if current_price == last_price:
+    if current_price > ALL_TIME_HIGH_PRICE:
+        return f"🚀🔥 $XRP just shattered its all-time high, now at an incredible ${current_price:.2f}!!! 🚀🔥\nTime: {timestamp}\n#Ripple #XRP #XRPATH #ToTheMoon"
+    elif current_price == last_price:
         return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     elif current_price > last_price:
         return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
