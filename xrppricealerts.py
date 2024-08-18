@@ -40,7 +40,7 @@ def generate_message(last_price, current_price, is_volatility_alert=False):
     elif current_price > last_price:
         return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
-        return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+        return f"🔔📉 $XRP is DOWN -{abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
 
 def append_to_csv(timestamp, full_price, rounded_price, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
