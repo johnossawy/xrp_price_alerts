@@ -66,8 +66,7 @@ def main():
                 price_data = fetch_xrp_price()
                 
                 if price_data and 'last' in price_data:
-                    # Use full precision price without rounding
-                    current_price = price_data['last']
+                    current_price = round(float(price_data['last']), 2)
                     
                     if last_price is not None:
                         tweet_text = generate_message(last_price, current_price)
@@ -89,11 +88,10 @@ def main():
                 price_data = fetch_xrp_price()
                 
                 if price_data and 'last' in price_data:
-                    # Use full precision price without rounding
-                    current_price = price_data['last']
-                    percent_change = get_percent_change(float(last_checked_price), float(current_price))
+                    current_price = round(float(price_data['last']), 2)
+                    percent_change = get_percent_change(last_checked_price, current_price)
                     
-                    if abs(float(current_price) - float(last_checked_price)) > VOLATILITY_THRESHOLD:
+                    if abs(current_price - last_checked_price) > VOLATILITY_THRESHOLD:
                         tweet_text = generate_message(last_checked_price, current_price, is_volatility_alert=True)
 
                         try:
