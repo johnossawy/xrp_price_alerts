@@ -1,14 +1,11 @@
 import time
 import logging
-import csv
 from datetime import datetime
 from app.twitter import get_twitter_client, post_tweet
 from app.fetcher import fetch_xrp_price
 from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
 
-# Set up logging
 logging.basicConfig(
-    filename='xrp_bot.log',
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
@@ -17,15 +14,10 @@ logging.basicConfig(
 # Define the All-Time High (ATH) price
 ALL_TIME_HIGH_PRICE = 3.65
 
-# Define the CSV file for storing price data
-CSV_FILE = 'xrp_price_data.csv'
-
 def get_percent_change(old_price, new_price):
-    """Calculate percentage change between two prices."""
     return ((new_price - old_price) / old_price) * 100 if old_price != 0 else 0
 
 def generate_message(last_price, current_price):
-    """Generate a message for Twitter based on price change."""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     percent_change = get_percent_change(last_price, current_price)
 
@@ -37,14 +29,6 @@ def generate_message(last_price, current_price):
         return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
         return f"🔔📉 $XRP is DOWN {abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
-
-def append_to_csv(timestamp, price, percent_change=None):
-    """Append price data to a CSV file."""
-    with open(CSV_FILE, 'a', newline='') as csvfile:
-        csv_writer = csv.writer(csvfile)
-        if csvfile.tell() == 0:  # If file is empty, write the header
-            csv_writer.writerow(['timestamp', 'price', 'percent_change'])
-        csv_writer.writerow([timestamp, price, percent_change])
 
 def main():
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
@@ -73,9 +57,6 @@ def main():
                         except Exception as e:
                             logging.error(f"Error posting tweet: {e}")
 
-                    # Log price data to CSV
-                    append_to_csv(current_time.strftime('%Y-%m-%d %H:%M:%S'), current_price, get_percent_change(last_price, current_price))
-                    
                     last_price = current_price
                 else:
                     logging.warning("Failed to fetch price data.")
