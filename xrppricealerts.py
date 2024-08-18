@@ -91,7 +91,7 @@ def main():
                 if price_data and 'last' in price_data:
                     full_price = float(price_data['last'])
                     rounded_price = round(full_price, 2)
-                    percent_change = get_percent_change(last_checked_price, rounded_price)
+                    percent_change = get_percent_change(last_checked_price, full_price)
                     
                     if abs(rounded_price - last_checked_price) > VOLATILITY_THRESHOLD:
                         tweet_text = generate_message(last_checked_price, rounded_price, is_volatility_alert=True)
@@ -107,7 +107,7 @@ def main():
 
             else:
                 # Set the initial last_checked_price
-                last_checked_price = last_price
+                last_checked_price = rounded_price
 
             # Sleep for 2 minutes before checking again for volatility
             time.sleep(120)
