@@ -42,12 +42,12 @@ def generate_message(last_price, current_price, is_volatility_alert=False):
     else:
         return f"🔔📉 $XRP is DOWN -{abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
 
-def append_to_csv(timestamp, full_price, rounded_price, percent_change=None):
+def append_to_csv(timestamp, full_price, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         if csvfile.tell() == 0:  # If file is empty, write the header
-            csv_writer.writerow(['timestamp', 'full_price', 'rounded_price', 'percent_change'])
-        csv_writer.writerow([timestamp, full_price, rounded_price, percent_change])
+            csv_writer.writerow(['timestamp', 'full_price', 'percent_change'])
+        csv_writer.writerow([timestamp, full_price, percent_change])
 
 def main():
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
@@ -67,10 +67,9 @@ def main():
                 
                 if price_data and 'last' in price_data:
                     full_price = float(price_data['last'])
-                    rounded_price = round(full_price, 2)
                     
                     if last_price is not None:
-                        tweet_text = generate_message(last_price, rounded_price)
+                        tweet_text = generate_message(last_price, full_price)
 
                         try:
                             post_tweet(client, tweet_text)
@@ -79,8 +78,8 @@ def main():
                         except Exception as e:
                             logging.error(f"Error posting tweet: {e}")
 
-                    append_to_csv(timestamp, full_price, rounded_price)
-                    last_price = rounded_price
+                    append_to_csv(timestamp, full_price)
+                    last_price = full_price
                 else:
                     logging.warning("Failed to fetch price data.")
             
@@ -90,11 +89,10 @@ def main():
                 
                 if price_data and 'last' in price_data:
                     full_price = float(price_data['last'])
-                    rounded_price = round(full_price, 2)
                     percent_change = get_percent_change(last_checked_price, full_price)
                     
-                    if abs(rounded_price - last_checked_price) > VOLATILITY_THRESHOLD:
-                        tweet_text = generate_message(last_checked_price, rounded_price, is_volatility_alert=True)
+                    if abs(full_price - last_checked_price) > VOLATILITY_THRESHOLD:
+                        tweet_text = generate_message(last_checked_price, full_price, is_volatility_alert=True)
 
                         try:
                             post_tweet(client, tweet_text)
@@ -102,12 +100,12 @@ def main():
                         except Exception as e:
                             logging.error(f"Error posting volatility alert tweet: {e}")
 
-                    append_to_csv(timestamp, full_price, rounded_price, percent_change)
-                    last_checked_price = rounded_price
+                    append_to_csv(timestamp, full_price, percent_change)
+                    last_checked_price = full_price
 
             else:
                 # Set the initial last_checked_price
-                last_checked_price = rounded_price
+                last_checked_price = full_price
 
             # Sleep for 2 minutes before checking again for volatility
             time.sleep(120)
