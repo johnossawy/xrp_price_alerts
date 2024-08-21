@@ -1,49 +1,17 @@
-import time
-import logging
 import csv
+import time
 from datetime import datetime
 from app.twitter import get_twitter_client, post_tweet
 from app.fetcher import fetch_xrp_price
+from app.xrp_messaging import generate_message, get_percent_change
+from app.xrp_logger import log_info, log_warning, log_error
 from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
-
-logging.basicConfig(
-    filename='xrp_bot.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-# Define the All-Time High (ATH) price
-ALL_TIME_HIGH_PRICE = 3.65
 
 # Define the volatility threshold
 VOLATILITY_THRESHOLD = 0.02
 
 # Define the CSV file for storing price data
 CSV_FILE = 'xrp_price_data.csv'
-
-def get_percent_change(old_price, new_price):
-    if old_price != 0:
-        return ((new_price - old_price) / old_price) * 100
-    else:
-        return 0
-
-def generate_message(last_price, current_price, is_volatility_alert=False):
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    percent_change = get_percent_change(last_price, current_price)
-
-    if current_price > ALL_TIME_HIGH_PRICE:
-        return f"🚀🔥 $XRP just shattered its all-time high, now at an incredible ${current_price:.2f}!!! 🚀🔥\nTime: {timestamp}\n#Ripple #XRP #XRPATH #ToTheMoon"
-    elif is_volatility_alert:
-        direction = "UP" if current_price > last_price else "DOWN"
-        emoji = "📈" if direction == "UP" else "📉"
-        return f"⚡️ $XRP is experiencing volatility! It's {direction} by {abs(percent_change):.2f}% to ${current_price:.2f} {emoji}\nTime: {timestamp}\n#Ripple #XRP #XRPVolatility"
-    elif current_price == last_price:
-        return f"🔔❗️ $XRP has retained a value of ${current_price:.2f} over the last hour.\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
-    elif current_price > last_price:
-        return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
-    else:
-        return f"🔔📉 $XRP is DOWN -{abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
 
 def append_to_csv(timestamp, full_price, rounded_price, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
@@ -54,7 +22,7 @@ def append_to_csv(timestamp, full_price, rounded_price, percent_change=None):
 
 def main():
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-    last_price = None
+    last_full_price = None  # Track the last full price for percent change calculation
     last_tweet_hour = None
     last_checked_price = None
 
@@ -64,59 +32,60 @@ def main():
             current_hour = current_time.hour
             timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
 
-            # Check if an hour has passed since the last tweet
-            if last_tweet_hour != current_hour:
-                price_data = fetch_xrp_price()
-                
-                if price_data and 'last' in price_data:
-                    full_price = float(price_data['last'])
-                    rounded_price = round(full_price, 2)
-                    
-                    if last_price is not None:
-                        tweet_text = generate_message(last_price, rounded_price)
+            # Fetch price data once per loop iteration
+            price_data = fetch_xrp_price()
 
-                        try:
-                            post_tweet(client, tweet_text)
-                            logging.info(f"Hourly tweet posted: {tweet_text}")
-                            last_tweet_hour = current_hour
-                        except Exception as e:
-                            logging.error(f"Error posting tweet: {e}")
+            if not price_data or 'last' not in price_data:
+                log_warning("Failed to fetch price data.")
+                time.sleep(120)
+                continue
 
-                    append_to_csv(timestamp, full_price, rounded_price)
-                    last_price = rounded_price
-                else:
-                    logging.warning("Failed to fetch price data.")
-            
-            # Volatility check every 2 minutes
-            if last_checked_price is not None:
-                price_data = fetch_xrp_price()
-                
-                if price_data and 'last' in price_data:
-                    full_price = float(price_data['last'])
-                    rounded_price = round(full_price, 2)
-                    percent_change = get_percent_change(last_checked_price, full_price)
-                    
-                    if abs(rounded_price - last_checked_price) > VOLATILITY_THRESHOLD:
-                        tweet_text = generate_message(last_checked_price, rounded_price, is_volatility_alert=True)
+            full_price = float(price_data['last'])
+            rounded_price = round(full_price, 2)
 
-                        try:
-                            post_tweet(client, tweet_text)
-                            logging.info(f"Volatility alert tweet posted: {tweet_text}")
-                        except Exception as e:
-                            logging.error(f"Error posting volatility alert tweet: {e}")
-
-                    append_to_csv(timestamp, full_price, rounded_price, percent_change)
-                    last_checked_price = rounded_price
-
+            # Calculate percent change against last_full_price for logging purposes only
+            if last_full_price is not None:
+                percent_change = get_percent_change(last_full_price, full_price)
             else:
-                # Set the initial last_checked_price
+                percent_change = None
+
+            # Log the price data with calculated percent change
+            append_to_csv(timestamp, full_price, rounded_price, percent_change)
+
+            # Update last_full_price for the next iteration
+            last_full_price = full_price
+
+            # Tweeting logic (unchanged)
+            if last_tweet_hour != current_hour:
+                if last_full_price is not None:
+                    tweet_text = generate_message(last_full_price, rounded_price)
+                    try:
+                        post_tweet(client, tweet_text)
+                        log_info(f"Hourly tweet posted: {tweet_text}")
+                        last_tweet_hour = current_hour
+                    except Exception as e:
+                        log_error(f"Error posting tweet: {type(e).__name__} - {e}")
+
+            # Volatility check logic (unchanged)
+            if last_checked_price is not None:
+                percent_change = get_percent_change(last_checked_price, full_price)
+                if abs(rounded_price - last_checked_price) > VOLATILITY_THRESHOLD:
+                    tweet_text = generate_message(last_checked_price, rounded_price, is_volatility_alert=True)
+                    try:
+                        post_tweet(client, tweet_text)
+                        log_info(f"Volatility alert tweet posted: {tweet_text}")
+                    except Exception as e:
+                        log_error(f"Error posting volatility alert tweet: {type(e).__name__} - {e}")
+
+                last_checked_price = rounded_price
+            else:
                 last_checked_price = rounded_price
 
             # Sleep for 2 minutes before checking again for volatility
             time.sleep(120)
 
         except Exception as e:
-            logging.error(f"An error occurred: {e}")
+            log_error(f"An error occurred: {type(e).__name__} - {e}")
             time.sleep(120)
 
 if __name__ == "__main__":
