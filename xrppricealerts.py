@@ -22,7 +22,8 @@ def append_to_csv(timestamp, full_price, rounded_price, percent_change=None):
 
 def main():
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-    last_full_price = None  # Track the last full price for percent change calculation
+    last_full_price = None  # For logging purposes
+    last_rounded_price = None  # For messaging purposes
     last_tweet_hour = None
     last_checked_price = None
 
@@ -43,7 +44,7 @@ def main():
             full_price = float(price_data['last'])
             rounded_price = round(full_price, 2)
 
-            # Calculate percent change against last_full_price for logging purposes only
+            # Calculate percent change for logging purposes only
             if last_full_price is not None:
                 percent_change = get_percent_change(last_full_price, full_price)
             else:
@@ -55,16 +56,19 @@ def main():
             # Update last_full_price for the next iteration
             last_full_price = full_price
 
-            # Tweeting logic (unchanged)
+            # Hourly tweet logic - continue using rounded_price for comparisons
             if last_tweet_hour != current_hour:
-                if last_full_price is not None:
-                    tweet_text = generate_message(last_full_price, rounded_price)
+                if last_rounded_price is not None:
+                    tweet_text = generate_message(last_rounded_price, rounded_price)
                     try:
                         post_tweet(client, tweet_text)
                         log_info(f"Hourly tweet posted: {tweet_text}")
                         last_tweet_hour = current_hour
                     except Exception as e:
                         log_error(f"Error posting tweet: {type(e).__name__} - {e}")
+
+            # Update last_rounded_price for next hour's comparison
+            last_rounded_price = rounded_price
 
             # Volatility check logic (unchanged)
             if last_checked_price is not None:
