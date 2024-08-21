@@ -13,12 +13,31 @@ VOLATILITY_THRESHOLD = 0.02
 # Define the CSV file for storing price data
 CSV_FILE = 'xrp_price_data.csv'
 
-def append_to_csv(timestamp, full_price, rounded_price, percent_change=None):
+# Update the append_to_csv function to include percent_change
+def append_to_csv(timestamp, price_data, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
-        if csvfile.tell() == 0:  # If file is empty, write the header
-            csv_writer.writerow(['timestamp', 'full_price', 'rounded_price', 'percent_change'])
-        csv_writer.writerow([timestamp, full_price, rounded_price, percent_change])
+        # Write the header if the file is empty
+        if csvfile.tell() == 0:
+            csv_writer.writerow([
+                'timestamp', 'last_price', 'open', 'high', 'low', 
+                'volume', 'vwap', 'bid', 'ask', 'percent_change_24', 'percent_change'
+            ])
+        
+        # Write the row of data
+        csv_writer.writerow([
+            timestamp,
+            price_data.get('last'),
+            price_data.get('open'),
+            price_data.get('high'),
+            price_data.get('low'),
+            price_data.get('volume'),
+            price_data.get('vwap'),
+            price_data.get('bid'),
+            price_data.get('ask'),
+            price_data.get('percent_change_24'),
+            percent_change  # Include your calculated percent change here
+        ])
 
 def main():
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
@@ -33,7 +52,7 @@ def main():
             current_hour = current_time.hour
             timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
 
-            # Fetch price data once per loop iteration
+            # Fetch price data
             price_data = fetch_xrp_price()
 
             if not price_data or 'last' not in price_data:
@@ -44,14 +63,14 @@ def main():
             full_price = float(price_data['last'])
             rounded_price = round(full_price, 2)
 
-            # Calculate percent change for logging purposes only
+            # Calculate percent change against last_full_price for logging purposes
             if last_full_price is not None:
                 percent_change = get_percent_change(last_full_price, full_price)
             else:
                 percent_change = None
 
             # Log the price data with calculated percent change
-            append_to_csv(timestamp, full_price, rounded_price, percent_change)
+            append_to_csv(timestamp, price_data, percent_change)
 
             # Update last_full_price for the next iteration
             last_full_price = full_price
