@@ -3,22 +3,22 @@ import time
 from datetime import datetime, timedelta
 from app.twitter import get_twitter_client, post_tweet
 from app.fetcher import fetch_xrp_price
-from app.xrp_messaging import generate_message, get_percent_change, generate_daily_summary_message
+from app.xrp_messaging import generate_message, get_percent_change, generate_daily_summary_message, generate_3_hour_summary
 from app.xrp_logger import log_info, log_warning, log_error
 from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
 
 # Define the volatility threshold
 VOLATILITY_THRESHOLD = 0.02
+SUMMARY_INTERVAL = 3  # 3-hour interval for summary tweets
 
 # Define the CSV file for storing price data
 CSV_FILE = 'xrp_price_data.csv'
 
-# Initialize daily high and low prices
+# Initialize tracking variables
 daily_high = None
 daily_low = None
-
-# Track the date to determine when to reset daily high/low
 current_day = datetime.now().date()
+last_summary_hour = None
 
 def append_to_csv(timestamp, price_data, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
@@ -44,7 +44,7 @@ def append_to_csv(timestamp, price_data, percent_change=None):
         ])
 
 def main():
-    global daily_high, daily_low, current_day
+    global daily_high, daily_low, current_day, last_summary_hour
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
     last_full_price = None  # For logging purposes
     last_rounded_price = None  # For messaging purposes
@@ -59,7 +59,6 @@ def main():
 
             # Reset daily high and low if a new day has started
             if current_time.date() != current_day:
-                # Post the daily summary tweet before resetting
                 daily_summary = generate_daily_summary_message(daily_high, daily_low)
                 if daily_summary:
                     try:
@@ -68,7 +67,6 @@ def main():
                     except Exception as e:
                         log_error(f"Error posting daily summary tweet: {type(e).__name__} - {e}")
                 
-                # Reset daily high and low for the new day
                 daily_high = None
                 daily_low = None
                 current_day = current_time.date()
@@ -112,6 +110,17 @@ def main():
                         last_tweet_hour = current_hour
                     except Exception as e:
                         log_error(f"Error posting tweet: {type(e).__name__} - {e}")
+
+            # Generate and post 3-hour summary tweet
+            if last_summary_hour is None or (current_hour - last_summary_hour) >= SUMMARY_INTERVAL:
+                summary_text = generate_3_hour_summary(CSV_FILE, full_price)
+                if summary_text:
+                    try:
+                        post_tweet(client, summary_text)
+                        log_info(f"3-hour summary tweet posted: {summary_text}")
+                        last_summary_hour = current_hour
+                    except Exception as e:
+                        log_error(f"Error posting 3-hour summary tweet: {type(e).__name__} - {e}")
 
             # Update last_rounded_price for next hour's comparison
             last_rounded_price = rounded_price
