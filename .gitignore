@@ -4,3 +4,4 @@ __pycache__/
 last_tweet.json
 venv/
 archive/
+.DS_Store
