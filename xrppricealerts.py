@@ -1,9 +1,9 @@
 import csv
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.twitter import get_twitter_client, post_tweet
 from app.fetcher import fetch_xrp_price
-from app.xrp_messaging import generate_message, get_percent_change
+from app.xrp_messaging import generate_message, get_percent_change, generate_daily_summary_message
 from app.xrp_logger import log_info, log_warning, log_error
 from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
 
@@ -13,18 +13,22 @@ VOLATILITY_THRESHOLD = 0.02
 # Define the CSV file for storing price data
 CSV_FILE = 'xrp_price_data.csv'
 
-# Update the append_to_csv function to include percent_change
+# Initialize daily high and low prices
+daily_high = None
+daily_low = None
+
+# Track the date to determine when to reset daily high/low
+current_day = datetime.now().date()
+
 def append_to_csv(timestamp, price_data, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
-        # Write the header if the file is empty
         if csvfile.tell() == 0:
             csv_writer.writerow([
                 'timestamp', 'last_price', 'open', 'high', 'low', 
                 'volume', 'vwap', 'bid', 'ask', 'percent_change_24', 'percent_change'
             ])
         
-        # Write the row of data
         csv_writer.writerow([
             timestamp,
             price_data.get('last'),
@@ -36,10 +40,11 @@ def append_to_csv(timestamp, price_data, percent_change=None):
             price_data.get('bid'),
             price_data.get('ask'),
             price_data.get('percent_change_24'),
-            percent_change  # Include your calculated percent change here
+            percent_change
         ])
 
 def main():
+    global daily_high, daily_low, current_day
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
     last_full_price = None  # For logging purposes
     last_rounded_price = None  # For messaging purposes
@@ -52,6 +57,22 @@ def main():
             current_hour = current_time.hour
             timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
 
+            # Reset daily high and low if a new day has started
+            if current_time.date() != current_day:
+                # Post the daily summary tweet before resetting
+                daily_summary = generate_daily_summary_message(daily_high, daily_low)
+                if daily_summary:
+                    try:
+                        post_tweet(client, daily_summary)
+                        log_info(f"Daily summary tweet posted: {daily_summary}")
+                    except Exception as e:
+                        log_error(f"Error posting daily summary tweet: {type(e).__name__} - {e}")
+                
+                # Reset daily high and low for the new day
+                daily_high = None
+                daily_low = None
+                current_day = current_time.date()
+
             # Fetch price data
             price_data = fetch_xrp_price()
 
@@ -62,6 +83,12 @@ def main():
 
             full_price = float(price_data['last'])
             rounded_price = round(full_price, 2)
+
+            # Update daily high and low
+            if daily_high is None or full_price > daily_high:
+                daily_high = full_price
+            if daily_low is None or full_price < daily_low:
+                daily_low = full_price
 
             # Calculate percent change against last_full_price for logging purposes
             if last_full_price is not None:

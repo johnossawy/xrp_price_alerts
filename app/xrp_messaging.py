@@ -24,3 +24,9 @@ def generate_message(last_price, current_price, is_volatility_alert=False):
         return f"🔔📈 $XRP is UP {percent_change:.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
     else:
         return f"🔔📉 $XRP is DOWN -{abs(percent_change):.2f}% over the last hour to ${current_price:.2f}!\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+
+def generate_daily_summary_message(daily_high, daily_low):
+    """Generate a message summarizing the day's price range."""
+    if daily_high is not None and daily_low is not None:
+        return f"📊 Daily Summary: Today’s XRP price ranged between ${daily_low:.5f} and ${daily_high:.5f}. #Ripple #XRP"
+    return None
