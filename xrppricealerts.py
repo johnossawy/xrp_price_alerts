@@ -1,7 +1,7 @@
 import csv
 import time
 from datetime import datetime, timedelta
-from app.twitter import get_twitter_client, post_tweet, upload_media
+from app.twitter import get_twitter_api, get_twitter_client, post_tweet, upload_media
 from app.fetcher import fetch_xrp_price
 from app.xrp_messaging import generate_message, get_percent_change, generate_daily_summary_message, generate_3_hour_summary
 from app.xrp_logger import log_info, log_warning, log_error
@@ -42,6 +42,9 @@ def append_to_csv(timestamp, price_data, percent_change=None):
             price_data.get('percent_change_24'),
             percent_change
         ])
+
+client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+api = get_twitter_api(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
 def main():
     global daily_high, daily_low, current_day, last_summary_time
@@ -116,7 +119,7 @@ def main():
                 summary_text, chart_filename = generate_3_hour_summary(CSV_FILE, full_price, RAPIDAPI_KEY)
                 if summary_text and chart_filename:
                     try:
-                        media_id = upload_media(client, chart_filename)
+                        media_id = upload_media(api, chart_filename)
                         post_tweet(client, summary_text, media_id)
                         log_info(f"3-hour summary tweet with chart posted: {summary_text}")
                         last_summary_time = current_hour  # Update the hour after posting
