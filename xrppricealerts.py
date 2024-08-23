@@ -9,7 +9,7 @@ from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SEC
 
 # Define the volatility threshold
 VOLATILITY_THRESHOLD = 0.02
-SUMMARY_INTERVAL = 3  # 3-hour interval for summary tweets
+SUMMARY_HOURS = {0, 3, 6, 9, 12, 15, 18, 21}  # Hours to post 3-hour summary tweets
 
 # Define the CSV file for storing price data
 CSV_FILE = 'xrp_price_data.csv'
@@ -18,7 +18,7 @@ CSV_FILE = 'xrp_price_data.csv'
 daily_high = None
 daily_low = None
 current_day = datetime.now().date()
-last_summary_hour = None
+last_summary_time = None  # Initialize to None
 
 def append_to_csv(timestamp, price_data, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
@@ -44,7 +44,7 @@ def append_to_csv(timestamp, price_data, percent_change=None):
         ])
 
 def main():
-    global daily_high, daily_low, current_day, last_summary_hour
+    global daily_high, daily_low, current_day, last_summary_time
     client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
     last_full_price = None  # For logging purposes
     last_rounded_price = None  # For messaging purposes
@@ -111,14 +111,14 @@ def main():
                     except Exception as e:
                         log_error(f"Error posting tweet: {type(e).__name__} - {e}")
 
-            # Generate and post 3-hour summary tweet
-            if last_summary_hour is None or (current_hour - last_summary_hour) >= SUMMARY_INTERVAL:
+            # Generate and post 3-hour summary tweet at specified hours
+            if current_hour in SUMMARY_HOURS and (last_summary_time is None or last_summary_time != current_hour):
                 summary_text = generate_3_hour_summary(CSV_FILE, full_price)
                 if summary_text:
                     try:
                         post_tweet(client, summary_text)
                         log_info(f"3-hour summary tweet posted: {summary_text}")
-                        last_summary_hour = current_hour
+                        last_summary_time = current_hour  # Update the hour after posting
                     except Exception as e:
                         log_error(f"Error posting 3-hour summary tweet: {type(e).__name__} - {e}")
 
