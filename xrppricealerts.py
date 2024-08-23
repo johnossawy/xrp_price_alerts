@@ -1,11 +1,11 @@
 import csv
 import time
 from datetime import datetime, timedelta
-from app.twitter import get_twitter_client, post_tweet
+from app.twitter import get_twitter_client, post_tweet, upload_media
 from app.fetcher import fetch_xrp_price
 from app.xrp_messaging import generate_message, get_percent_change, generate_daily_summary_message, generate_3_hour_summary
 from app.xrp_logger import log_info, log_warning, log_error
-from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
+from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET, RAPIDAPI_KEY
 
 # Define the volatility threshold
 VOLATILITY_THRESHOLD = 0.02
@@ -111,16 +111,17 @@ def main():
                     except Exception as e:
                         log_error(f"Error posting tweet: {type(e).__name__} - {e}")
 
-            # Generate and post 3-hour summary tweet at specified hours
+            # Generate and post 3-hour summary tweet with chart at specified hours
             if current_hour in SUMMARY_HOURS and (last_summary_time is None or last_summary_time != current_hour):
-                summary_text = generate_3_hour_summary(CSV_FILE, full_price)
-                if summary_text:
+                summary_text, chart_filename = generate_3_hour_summary(CSV_FILE, full_price, RAPIDAPI_KEY)
+                if summary_text and chart_filename:
                     try:
-                        post_tweet(client, summary_text)
-                        log_info(f"3-hour summary tweet posted: {summary_text}")
+                        media_id = upload_media(client, chart_filename)
+                        post_tweet(client, summary_text, media_id)
+                        log_info(f"3-hour summary tweet with chart posted: {summary_text}")
                         last_summary_time = current_hour  # Update the hour after posting
                     except Exception as e:
-                        log_error(f"Error posting 3-hour summary tweet: {type(e).__name__} - {e}")
+                        log_error(f"Error posting 3-hour summary tweet with chart: {type(e).__name__} - {e}")
 
             # Update last_rounded_price for next hour's comparison
             last_rounded_price = rounded_price
