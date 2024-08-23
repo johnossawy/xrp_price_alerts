@@ -48,7 +48,6 @@ api = get_twitter_api(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_
 
 def main():
     global daily_high, daily_low, current_day, last_summary_time
-    client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
     last_full_price = None  # For logging purposes
     last_rounded_price = None  # For messaging purposes
     last_tweet_hour = None
@@ -58,6 +57,7 @@ def main():
         try:
             current_time = datetime.now()
             current_hour = current_time.hour
+            current_minute = current_time.minute
             timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
 
             # Reset daily high and low if a new day has started
@@ -116,15 +116,16 @@ def main():
 
             # Generate and post 3-hour summary tweet with chart at specified hours
             if current_hour in SUMMARY_HOURS and (last_summary_time is None or last_summary_time != current_hour):
-                summary_text, chart_filename = generate_3_hour_summary(CSV_FILE, full_price, RAPIDAPI_KEY)
-                if summary_text and chart_filename:
-                    try:
-                        media_id = upload_media(api, chart_filename)
-                        post_tweet(client, summary_text, media_id)
-                        log_info(f"3-hour summary tweet with chart posted: {summary_text}")
-                        last_summary_time = current_hour  # Update the hour after posting
-                    except Exception as e:
-                        log_error(f"Error posting 3-hour summary tweet with chart: {type(e).__name__} - {e}")
+                if current_minute < 5:  # Allow a 5-minute window to post the summary
+                    summary_text, chart_filename = generate_3_hour_summary(CSV_FILE, full_price, RAPIDAPI_KEY)
+                    if summary_text and chart_filename:
+                        try:
+                            media_id = upload_media(api, chart_filename)
+                            post_tweet(client, summary_text, media_id)
+                            log_info(f"3-hour summary tweet with chart posted: {summary_text}")
+                            last_summary_time = current_hour  # Update the hour after posting
+                        except Exception as e:
+                            log_error(f"Error posting 3-hour summary tweet with chart: {type(e).__name__} - {e}")
 
             # Update last_rounded_price for next hour's comparison
             last_rounded_price = rounded_price
