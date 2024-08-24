@@ -4,6 +4,7 @@ import base64
 from PIL import Image
 from io import BytesIO
 from datetime import datetime, timedelta
+from app.xrp_logger import log_info
 
 ALL_TIME_HIGH_PRICE = 3.65
 
