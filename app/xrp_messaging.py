@@ -16,6 +16,8 @@ def get_percent_change(old_price, new_price):
 def generate_message(last_price, current_price, is_volatility_alert=False):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     percent_change = get_percent_change(last_price, current_price)
+    
+    log_info(f"Generating message: last_price={last_price}, current_price={current_price}, percent_change={percent_change:.2f}%")
 
     if current_price > ALL_TIME_HIGH_PRICE:
         return f"🚀🔥 $XRP just shattered its all-time high, now at an incredible ${current_price:.2f}!!! 🚀🔥\nTime: {timestamp}\n#Ripple #XRP #XRPATH #ToTheMoon"
