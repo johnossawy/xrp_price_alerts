@@ -61,7 +61,8 @@ def main():
             timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
 
             # Reset daily high and low if a new day has started
-            if current_time.date() != current_day:
+            if current_time.date() != current_day or (current_hour == 0 and current_minute <= 5):
+            # Trigger daily summary
                 daily_summary = generate_daily_summary_message(daily_high, daily_low)
                 if daily_summary:
                     try:

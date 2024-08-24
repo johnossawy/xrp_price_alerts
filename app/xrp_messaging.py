@@ -67,7 +67,7 @@ def generate_3_hour_summary(csv_file, current_price, rapidapi_key):
             f"🔔🕒 #XRP Price in last 3 hours: {percent_change:+.2f}% change\n"
             f"Support around ${support:.5f}\n"
             f"Resistance around ${resistance:.5f}\n"
-            f"Last $XRP Price: ${current_price:.5f}\n#Ripple #XRP #XRPPriceAlerts"
+            f"Last $XRP Price: ${current_price:.5f}\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
         )
 
         # Generate the chart
