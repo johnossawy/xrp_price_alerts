@@ -9,7 +9,7 @@ from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SEC
 
 # Define the volatility threshold
 VOLATILITY_THRESHOLD = 0.02
-SUMMARY_HOURS = {0, 3, 6, 9, 12, 15, 18, 21}  # Hours to post 3-hour summary tweets
+SUMMARY_TIMES = {(0, 0), (3, 0), (6, 0), (9, 0), (12, 0), (15, 0), (18, 0), (21, 0)}  # Hours to post 3-hour summary tweets
 
 # Define the CSV file for storing price data
 CSV_FILE = 'xrp_price_data.csv'
@@ -19,6 +19,7 @@ daily_high = None
 daily_low = None
 current_day = datetime.now().date()
 last_summary_time = None  # Initialize to None
+last_volatility_check_time = None  # Initialize for tracking the last volatility check time
 
 def append_to_csv(timestamp, price_data, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
@@ -47,7 +48,7 @@ client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_
 api = get_twitter_api(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
 def main():
-    global daily_high, daily_low, current_day, last_summary_time
+    global daily_high, daily_low, current_day, last_summary_time, last_volatility_check_time
     last_full_price = None  # For logging purposes
     last_rounded_price = None  # For messaging purposes
     last_tweet_hour = None
@@ -60,9 +61,10 @@ def main():
             current_minute = current_time.minute
             timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
 
+            log_info(f"Checking time: Hour={current_hour}, Minute={current_minute}")
+
             # Reset daily high and low if a new day has started
-            if current_time.date() != current_day or (current_hour == 0 and current_minute <= 5):
-            # Trigger daily summary
+            if current_time.date() != current_day:
                 daily_summary = generate_daily_summary_message(daily_high, daily_low)
                 if daily_summary:
                     try:
@@ -115,9 +117,11 @@ def main():
                     except Exception as e:
                         log_error(f"Error posting tweet: {type(e).__name__} - {e}")
 
-            # Generate and post 3-hour summary tweet with chart at specified hours
-            if current_hour in SUMMARY_HOURS and (last_summary_time is None or last_summary_time != current_hour):
-                if current_minute < 5:  # Allow a 5-minute window to post the summary
+            # Generate and post 3-hour summary tweet with chart at specified times
+            log_info(f"Checking 3-hour summary condition: Current Hour={current_hour}, Minute={current_minute}, Last Summary Hour={last_summary_time}")
+            if (current_hour, current_minute) in SUMMARY_TIMES and (last_summary_time is None or last_summary_time != current_hour):
+                log_info("3-hour summary condition met. Attempting to generate and post.")
+                try:
                     summary_text, chart_filename = generate_3_hour_summary(CSV_FILE, full_price, RAPIDAPI_KEY)
                     if summary_text and chart_filename:
                         try:
@@ -127,26 +131,33 @@ def main():
                             last_summary_time = current_hour  # Update the hour after posting
                         except Exception as e:
                             log_error(f"Error posting 3-hour summary tweet with chart: {type(e).__name__} - {e}")
+                    else:
+                        log_error("3-hour summary generation failed: No summary text or chart filename generated.")
+                except Exception as e:
+                    log_error(f"Error during 3-hour summary generation: {type(e).__name__} - {e}")
+
+            # Volatility check logic with 15-minute interval
+            if last_volatility_check_time is None or (current_time - last_volatility_check_time) >= timedelta(minutes=15):
+                log_info(f"Checking for volatility: last_checked_price={last_checked_price}, full_price={full_price}")
+                if last_checked_price is not None:
+                    percent_change = get_percent_change(last_checked_price, full_price)
+                    if abs(rounded_price - last_checked_price) > VOLATILITY_THRESHOLD:
+                        tweet_text = generate_message(last_checked_price, rounded_price, is_volatility_alert=True)
+                        try:
+                            post_tweet(client, tweet_text)
+                            log_info(f"Volatility alert tweet posted: {tweet_text}")
+                        except Exception as e:
+                            log_error(f"Error posting volatility alert tweet: {type(e).__name__} - {e}")
+                    last_checked_price = rounded_price
+                else:
+                    last_checked_price = rounded_price
+                
+                last_volatility_check_time = current_time  # Update the last check time
 
             # Update last_rounded_price for next hour's comparison
             last_rounded_price = rounded_price
 
-            # Volatility check logic (unchanged)
-            if last_checked_price is not None:
-                percent_change = get_percent_change(last_checked_price, full_price)
-                if abs(rounded_price - last_checked_price) > VOLATILITY_THRESHOLD:
-                    tweet_text = generate_message(last_checked_price, rounded_price, is_volatility_alert=True)
-                    try:
-                        post_tweet(client, tweet_text)
-                        log_info(f"Volatility alert tweet posted: {tweet_text}")
-                    except Exception as e:
-                        log_error(f"Error posting volatility alert tweet: {type(e).__name__} - {e}")
-
-                last_checked_price = rounded_price
-            else:
-                last_checked_price = rounded_price
-
-            # Sleep for 2 minutes before checking again for volatility
+            # Sleep for 2 minutes before checking again for other conditions
             time.sleep(120)
 
         except Exception as e:
