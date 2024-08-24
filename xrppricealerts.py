@@ -1,5 +1,7 @@
 import csv
 import time
+import json
+import os
 from datetime import datetime, timedelta
 from app.twitter import get_twitter_api, get_twitter_client, post_tweet, upload_media
 from app.fetcher import fetch_xrp_price
@@ -11,8 +13,9 @@ from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SEC
 VOLATILITY_THRESHOLD = 0.02
 SUMMARY_TIMES = {(0, 0), (3, 0), (6, 0), (9, 0), (12, 0), (15, 0), (18, 0), (21, 0)}  # Hours to post 3-hour summary tweets
 
-# Define the CSV file for storing price data
+# Define the CSV file for storing price data and the JSON file for last summary time
 CSV_FILE = 'xrp_price_data.csv'
+LAST_SUMMARY_FILE = 'last_summary_time.json'
 
 # Initialize tracking variables
 daily_high = None
@@ -20,6 +23,18 @@ daily_low = None
 current_day = datetime.now().date()
 last_summary_time = None  # Initialize to None
 last_volatility_check_time = None  # Initialize for tracking the last volatility check time
+
+# Utility functions to load and save last summary time
+def load_last_summary_time():
+    if os.path.exists(LAST_SUMMARY_FILE):
+        with open(LAST_SUMMARY_FILE, 'r') as file:
+            data = json.load(file)
+            return data.get('last_summary_time')
+    return None
+
+def save_last_summary_time(time_value):
+    with open(LAST_SUMMARY_FILE, 'w') as file:
+        json.dump({'last_summary_time': time_value}, file)
 
 def append_to_csv(timestamp, price_data, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
@@ -53,6 +68,9 @@ def main():
     last_rounded_price = None  # For messaging purposes
     last_tweet_hour = None
     last_checked_price = None
+
+    # Load the last summary time
+    last_summary_time = load_last_summary_time()
 
     while True:
         try:
@@ -106,35 +124,38 @@ def main():
             # Update last_full_price for the next iteration
             last_full_price = full_price
 
-            # Hourly tweet logic - continue using rounded_price for comparisons
+            # Hourly tweet logic with 5-minute grace period
             if last_tweet_hour != current_hour:
                 if last_rounded_price is not None:
-                    tweet_text = generate_message(last_rounded_price, rounded_price)
-                    try:
-                        post_tweet(client, tweet_text)
-                        log_info(f"Hourly tweet posted: {tweet_text}")
-                        last_tweet_hour = current_hour
-                    except Exception as e:
-                        log_error(f"Error posting tweet: {type(e).__name__} - {e}")
+                    if current_minute < 5:  # Allow a 5-minute window to post the hourly tweet
+                        tweet_text = generate_message(last_rounded_price, rounded_price)
+                        try:
+                            post_tweet(client, tweet_text)
+                            log_info(f"Hourly tweet posted: {tweet_text}")
+                            last_tweet_hour = current_hour
+                        except Exception as e:
+                            log_error(f"Error posting tweet: {type(e).__name__} - {e}")
 
-            # Generate and post 3-hour summary tweet with chart at specified times
+            # Generate and post 3-hour summary tweet with chart at specified times with 5-minute grace period
             log_info(f"Checking 3-hour summary condition: Current Hour={current_hour}, Minute={current_minute}, Last Summary Hour={last_summary_time}")
             if (current_hour, current_minute) in SUMMARY_TIMES and (last_summary_time is None or last_summary_time != current_hour):
-                log_info("3-hour summary condition met. Attempting to generate and post.")
-                try:
-                    summary_text, chart_filename = generate_3_hour_summary(CSV_FILE, full_price, RAPIDAPI_KEY)
-                    if summary_text and chart_filename:
-                        try:
-                            media_id = upload_media(api, chart_filename)
-                            post_tweet(client, summary_text, media_id)
-                            log_info(f"3-hour summary tweet with chart posted: {summary_text}")
-                            last_summary_time = current_hour  # Update the hour after posting
-                        except Exception as e:
-                            log_error(f"Error posting 3-hour summary tweet with chart: {type(e).__name__} - {e}")
-                    else:
-                        log_error("3-hour summary generation failed: No summary text or chart filename generated.")
-                except Exception as e:
-                    log_error(f"Error during 3-hour summary generation: {type(e).__name__} - {e}")
+                if current_minute < 5:  # Allow a 5-minute window to post the 3-hour summary
+                    log_info("3-hour summary condition met. Attempting to generate and post.")
+                    try:
+                        summary_text, chart_filename = generate_3_hour_summary(CSV_FILE, full_price, RAPIDAPI_KEY)
+                        if summary_text and chart_filename:
+                            try:
+                                media_id = upload_media(api, chart_filename)
+                                post_tweet(client, summary_text, media_id)
+                                log_info(f"3-hour summary tweet with chart posted: {summary_text}")
+                                last_summary_time = current_hour  # Update the hour after posting
+                                save_last_summary_time(last_summary_time)  # Save the updated summary time
+                            except Exception as e:
+                                log_error(f"Error posting 3-hour summary tweet with chart: {type(e).__name__} - {e}")
+                        else:
+                            log_error("3-hour summary generation failed: No summary text or chart filename generated.")
+                    except Exception as e:
+                        log_error(f"Error during 3-hour summary generation: {type(e).__name__} - {e}")
 
             # Volatility check logic with 15-minute interval
             if last_volatility_check_time is None or (current_time - last_volatility_check_time) >= timedelta(minutes=15):
