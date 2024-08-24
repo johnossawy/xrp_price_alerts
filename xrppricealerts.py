@@ -124,17 +124,22 @@ def main():
             # Update last_full_price for the next iteration
             last_full_price = full_price
 
-            # Hourly tweet logic with 5-minute grace period
+            # Hourly tweet logic - continue using rounded_price for comparisons
             if last_tweet_hour != current_hour:
                 if last_rounded_price is not None:
-                    if current_minute < 5:  # Allow a 5-minute window to post the hourly tweet
-                        tweet_text = generate_message(last_rounded_price, rounded_price)
-                        try:
-                            post_tweet(client, tweet_text)
-                            log_info(f"Hourly tweet posted: {tweet_text}")
-                            last_tweet_hour = current_hour
-                        except Exception as e:
-                            log_error(f"Error posting tweet: {type(e).__name__} - {e}")
+                    log_info(f"Comparing last_rounded_price={last_rounded_price} with rounded_price={rounded_price}")
+                    percent_change = get_percent_change(last_rounded_price, rounded_price)
+                    log_info(f"Calculated percent_change={percent_change:.2f}%")
+                    
+                    tweet_text = generate_message(last_rounded_price, rounded_price)
+                    try:
+                        post_tweet(client, tweet_text)
+                        log_info(f"Hourly tweet posted: {tweet_text}")
+                        last_tweet_hour = current_hour
+                    except Exception as e:
+                        log_error(f"Error posting tweet: {type(e).__name__} - {e}")
+                else:
+                    log_warning("last_rounded_price is None, skipping hourly tweet.")
 
             # Generate and post 3-hour summary tweet with chart at specified times with 5-minute grace period
             log_info(f"Checking 3-hour summary condition: Current Hour={current_hour}, Minute={current_minute}, Last Summary Hour={last_summary_time}")
