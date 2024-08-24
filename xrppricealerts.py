@@ -16,6 +16,7 @@ SUMMARY_TIMES = {(0, 0), (3, 0), (6, 0), (9, 0), (12, 0), (15, 0), (18, 0), (21,
 # Define the CSV file for storing price data and the JSON file for last summary time
 CSV_FILE = 'xrp_price_data.csv'
 LAST_SUMMARY_FILE = 'last_summary_time.json'
+LAST_PRICE_FILE = 'last_rounded_price.json'
 
 # Initialize tracking variables
 daily_high = None
@@ -23,6 +24,19 @@ daily_low = None
 current_day = datetime.now().date()
 last_summary_time = None  # Initialize to None
 last_volatility_check_time = None  # Initialize for tracking the last volatility check time
+last_rounded_price = None  # Initialize for tracking the last rounded price
+
+# Utility functions to load and save last rounded price
+def load_last_rounded_price():
+    if os.path.exists(LAST_PRICE_FILE):
+        with open(LAST_PRICE_FILE, 'r') as file:
+            data = json.load(file)
+            return data.get('last_rounded_price')
+    return None
+
+def save_last_rounded_price(price_value):
+    with open(LAST_PRICE_FILE, 'w') as file:
+        json.dump({'last_rounded_price': price_value}, file)
 
 # Utility functions to load and save last summary time
 def load_last_summary_time():
@@ -35,6 +49,10 @@ def load_last_summary_time():
 def save_last_summary_time(time_value):
     with open(LAST_SUMMARY_FILE, 'w') as file:
         json.dump({'last_summary_time': time_value}, file)
+
+# Load the last rounded price and last summary time at the start of the script
+last_rounded_price = load_last_rounded_price()
+last_summary_time = load_last_summary_time()
 
 def append_to_csv(timestamp, price_data, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
@@ -63,14 +81,10 @@ client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_
 api = get_twitter_api(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
 def main():
-    global daily_high, daily_low, current_day, last_summary_time, last_volatility_check_time
+    global daily_high, daily_low, current_day, last_summary_time, last_volatility_check_time, last_rounded_price
     last_full_price = None  # For logging purposes
-    last_rounded_price = None  # For messaging purposes
     last_tweet_hour = None
     last_checked_price = None
-
-    # Load the last summary time
-    last_summary_time = load_last_summary_time()
 
     while True:
         try:
@@ -80,20 +94,6 @@ def main():
             timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
 
             log_info(f"Checking time: Hour={current_hour}, Minute={current_minute}")
-
-            # Reset daily high and low if a new day has started
-            if current_time.date() != current_day:
-                daily_summary = generate_daily_summary_message(daily_high, daily_low)
-                if daily_summary:
-                    try:
-                        post_tweet(client, daily_summary)
-                        log_info(f"Daily summary tweet posted: {daily_summary}")
-                    except Exception as e:
-                        log_error(f"Error posting daily summary tweet: {type(e).__name__} - {e}")
-                
-                daily_high = None
-                daily_low = None
-                current_day = current_time.date()
 
             # Fetch price data
             price_data = fetch_xrp_price()
@@ -124,8 +124,8 @@ def main():
             # Update last_full_price for the next iteration
             last_full_price = full_price
 
-            # Hourly tweet logic - continue using rounded_price for comparisons
-            if last_tweet_hour != current_hour:
+            # Hourly tweet logic with 5-minute grace period
+            if last_tweet_hour != current_hour and current_minute < 5:
                 if last_rounded_price is not None:
                     log_info(f"Comparing last_rounded_price={last_rounded_price} with rounded_price={rounded_price}")
                     percent_change = get_percent_change(last_rounded_price, rounded_price)
@@ -138,13 +138,17 @@ def main():
                         last_tweet_hour = current_hour
                     except Exception as e:
                         log_error(f"Error posting tweet: {type(e).__name__} - {e}")
+                    
+                    # Save the current rounded price after posting
+                    save_last_rounded_price(rounded_price)
+                    last_rounded_price = rounded_price  # Update for next comparison
                 else:
                     log_warning("last_rounded_price is None, skipping hourly tweet.")
 
-            # Generate and post 3-hour summary tweet with chart at specified times with 5-minute grace period
+            # Generate and post 3-hour summary tweet with chart at specified times, with 5-minute grace period
             log_info(f"Checking 3-hour summary condition: Current Hour={current_hour}, Minute={current_minute}, Last Summary Hour={last_summary_time}")
             if (current_hour, current_minute) in SUMMARY_TIMES and (last_summary_time is None or last_summary_time != current_hour):
-                if current_minute < 5:  # Allow a 5-minute window to post the 3-hour summary
+                if current_minute < 5:
                     log_info("3-hour summary condition met. Attempting to generate and post.")
                     try:
                         summary_text, chart_filename = generate_3_hour_summary(CSV_FILE, full_price, RAPIDAPI_KEY)
@@ -179,9 +183,6 @@ def main():
                     last_checked_price = rounded_price
                 
                 last_volatility_check_time = current_time  # Update the last check time
-
-            # Update last_rounded_price for next hour's comparison
-            last_rounded_price = rounded_price
 
             # Sleep for 2 minutes before checking again for other conditions
             time.sleep(120)
