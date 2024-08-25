@@ -13,7 +13,7 @@ from config import CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SEC
 VOLATILITY_THRESHOLD = 0.02
 SUMMARY_TIMES = {(0, 0), (3, 0), (6, 0), (9, 0), (12, 0), (15, 0), (18, 0), (21, 0)}  # Hours to post 3-hour summary tweets
 
-# Define the CSV file for storing price data and the JSON file for last summary time
+# Define the CSV file for storing price data and the JSON files for last summary time and last rounded price
 CSV_FILE = 'xrp_price_data.csv'
 LAST_SUMMARY_FILE = 'last_summary_time.json'
 LAST_PRICE_FILE = 'last_rounded_price.json'
@@ -31,12 +31,18 @@ def load_last_rounded_price():
     if os.path.exists(LAST_PRICE_FILE):
         with open(LAST_PRICE_FILE, 'r') as file:
             data = json.load(file)
+            log_info(f"Loaded last_rounded_price: {data.get('last_rounded_price')}")
             return data.get('last_rounded_price')
+    log_warning("last_rounded_price.json does not exist, returning None")
     return None
 
 def save_last_rounded_price(price_value):
-    with open(LAST_PRICE_FILE, 'w') as file:
-        json.dump({'last_rounded_price': price_value}, file)
+    try:
+        with open(LAST_PRICE_FILE, 'w') as file:
+            json.dump({'last_rounded_price': price_value}, file)
+        log_info(f"Saved last_rounded_price: {price_value}")
+    except Exception as e:
+        log_error(f"Error saving last_rounded_price: {type(e).__name__} - {e}")
 
 # Utility functions to load and save last summary time
 def load_last_summary_time():
@@ -111,6 +117,11 @@ def main():
                 daily_high = full_price
             if daily_low is None or full_price < daily_low:
                 daily_low = full_price
+
+            # Force save the rounded price on first run if it is None
+            if last_rounded_price is None:
+                save_last_rounded_price(rounded_price)
+                last_rounded_price = rounded_price
 
             # Calculate percent change against last_full_price for logging purposes
             if last_full_price is not None:
