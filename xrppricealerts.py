@@ -158,8 +158,8 @@ def main():
 
             # Generate and post 3-hour summary tweet with chart at specified times, with 5-minute grace period
             log_info(f"Checking 3-hour summary condition: Current Hour={current_hour}, Minute={current_minute}, Last Summary Hour={last_summary_time}")
-            if (current_hour, current_minute) in SUMMARY_TIMES and (last_summary_time is None or last_summary_time != current_hour):
-                if current_minute < 5:
+            if current_hour in [hour for hour, _ in SUMMARY_TIMES] and (last_summary_time is None or last_summary_time != current_hour):
+                if current_minute < 5:  # Grace period of 15 minutes
                     log_info("3-hour summary condition met. Attempting to generate and post.")
                     try:
                         summary_text, chart_filename = generate_3_hour_summary(CSV_FILE, full_price, RAPIDAPI_KEY)
@@ -170,12 +170,15 @@ def main():
                                 log_info(f"3-hour summary tweet with chart posted: {summary_text}")
                                 last_summary_time = current_hour  # Update the hour after posting
                                 save_last_summary_time(last_summary_time)  # Save the updated summary time
+                                log_info(f"Updated last_summary_time to: {last_summary_time}")
                             except Exception as e:
                                 log_error(f"Error posting 3-hour summary tweet with chart: {type(e).__name__} - {e}")
                         else:
                             log_error("3-hour summary generation failed: No summary text or chart filename generated.")
                     except Exception as e:
                         log_error(f"Error during 3-hour summary generation: {type(e).__name__} - {e}")
+            else:
+                log_info("3-hour summary condition not met.")
 
             # Volatility check logic with 15-minute interval
             if last_volatility_check_time is None or (current_time - last_volatility_check_time) >= timedelta(minutes=15):
