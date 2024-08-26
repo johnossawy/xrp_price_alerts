@@ -106,7 +106,7 @@ def main():
 
             if not price_data or 'last' not in price_data:
                 log_warning("Failed to fetch price data.")
-                time.sleep(120)
+                time.sleep(60)
                 continue
 
             full_price = float(price_data['last'])
@@ -198,12 +198,12 @@ def main():
                 
                 last_volatility_check_time = current_time  # Update the last check time
 
-            # Sleep for 2 minutes before checking again for other conditions
-            time.sleep(120)
+            # Sleep for 1 minute before checking again for other conditions
+            time.sleep(60)
 
         except Exception as e:
             log_error(f"An error occurred: {type(e).__name__} - {e}")
-            time.sleep(120)
+            time.sleep(60)
 
 if __name__ == "__main__":
     main()
