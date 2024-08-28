@@ -41,9 +41,11 @@ def generate_message(last_price, current_price, is_volatility_alert=False):
 def generate_daily_summary_message(daily_high, daily_low):
     """Generate a message summarizing the day's price range."""
     if daily_high is not None and daily_low is not None:
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         return (
             f"📊 Daily Recap: Today’s $XRP traded between a low of ${daily_low:.5f} and a high of ${daily_high:.5f}.\n"
             f"What's next for XRP? Stay tuned! 📈💥\n"
+            f"Time: {timestamp}\n"
             f"#Ripple #XRP #XRPPriceAlerts"
         )
     return None

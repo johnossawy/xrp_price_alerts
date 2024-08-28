@@ -25,6 +25,7 @@ current_day = datetime.now().date()
 last_summary_time = None  # Initialize to None
 last_volatility_check_time = None  # Initialize for tracking the last volatility check time
 last_rounded_price = None  # Initialize for tracking the last rounded price
+last_daily_summary_time = None # Initialize for tracking the last daily summary
 
 # Utility functions to load and save last rounded price
 def load_last_rounded_price():
@@ -200,19 +201,23 @@ def main():
 
             # Daily summary posting at 11 PM
             if current_hour == 23 and current_minute < 5:
-                if daily_high is not None and daily_low is not None:
-                    # Generate and post the daily summary
-                    summary_text = generate_daily_summary_message(daily_high, daily_low)
-                    try:
-                        post_tweet(client, summary_text)
-                        log_info(f"Daily summary tweet posted: {summary_text}")
-                    except Exception as e:
-                        log_error(f"Error posting daily summary tweet: {type(e).__name__} - {e}")
+                if last_daily_summary_time is None or last_daily_summary_time.date() != current_day:
+                    if daily_high is not None and daily_low is not None:
+                        # Generate and post the daily summary
+                        summary_text = generate_daily_summary_message(daily_high, daily_low)
+                        try:
+                            post_tweet(client, summary_text)
+                            log_info(f"Daily summary tweet posted: {summary_text}")
+                        except Exception as e:
+                            log_error(f"Error posting daily summary tweet: {type(e).__name__} - {e}")
 
-                    # Reset daily high and low for the next day
-                    daily_high = None
-                    daily_low = None
-                    current_day = datetime.now().date()
+                        # Update the last summary time to prevent multiple posts
+                        last_daily_summary_time = current_time
+
+                        # Reset daily high and low for the next day
+                        daily_high = None
+                        daily_low = None
+                        current_day = datetime.now().date()
 
             # Sleep for 1 minute before checking again for other conditions
             time.sleep(60)
