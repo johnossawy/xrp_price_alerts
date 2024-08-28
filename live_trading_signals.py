@@ -70,7 +70,11 @@ def process_new_data(row, df):
         
         if price_drop < sudden_drop_threshold:
             # Detected sudden drop, do not buy
-            message = f"⚠️ Sudden Price Drop Detected: Price dropped by {price_drop:.2%} from ${previous_price:.5f} to ${price:.5f}. Skipping buy."
+            message = (
+                f"⚠️ *Sudden Price Drop Detected!*\n"
+                f"Price dropped by {price_drop:.2%} from ${previous_price:.5f} to ${price:.5f}.\n"
+                f"_Skipping buy to avoid potential loss._"
+            )
             logging.info(message)
             send_telegram_message(message)
             return
@@ -80,7 +84,11 @@ def process_new_data(row, df):
         position = 'long'
         entry_price = price
         last_trade_time = current_time
-        message = f"⚠️ Buy Signal Triggered: Bought at ${price:.5f} (VWAP: ${vwap:.5f}) on {timestamp}"
+        message = (
+            f"⚠️ *Buy Signal Triggered*\n"
+            f"Bought at: ${price:.5f} (VWAP: ${vwap:.5f})\n"
+            f"Time: {timestamp}"
+        )
         logging.info(message)
         send_telegram_message(message)
 
@@ -93,9 +101,11 @@ def process_new_data(row, df):
             capital += profit_loss
             last_trade_time = current_time
             message = (
-                f"🚨 Sell Signal Triggered: Sold at ${price:.5f} (VWAP: ${vwap:.5f}) on {timestamp}\n"
-                f"   Trade Result: Profit/Loss = ${profit_loss:.2f}\n"
-                f"   Updated Capital: ${capital:.2f}"
+                f"🚨 *Sell Signal Triggered*\n"
+                f"Sold at: ${price:.5f} (VWAP: ${vwap:.5f})\n"
+                f"Time: {timestamp}\n\n"
+                f"*Trade Result:* ${profit_loss:.2f}\n"
+                f"*Updated Capital:* ${capital:.2f}"
             )
             logging.info(message)
             send_telegram_message(message)
