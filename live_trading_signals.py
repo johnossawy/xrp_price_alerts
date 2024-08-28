@@ -76,7 +76,7 @@ def process_new_data(row, df):
                 f"_Skipping buy to avoid potential loss._"
             )
             logging.info(message)
-            send_telegram_message(message)
+            send_telegram_message(message)  # Send the alert to Telegram
             return
 
     # Check for oversold condition (Buy Signal)
