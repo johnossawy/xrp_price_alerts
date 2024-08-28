@@ -21,7 +21,12 @@ def generate_message(last_price, current_price, is_volatility_alert=False):
     log_info(f"Generating message: last_price={last_price}, current_price={current_price}, percent_change={percent_change:.2f}%")
 
     if current_price > ALL_TIME_HIGH_PRICE:
-        return f"🚀🔥 $XRP just shattered its all-time high, now at an incredible ${current_price:.2f}!!! 🚀🔥\nTime: {timestamp}\n#Ripple #XRP #XRPATH #ToTheMoon"
+        return (
+            f"🚀🔥 $XRP just smashed through its all-time high, now trading at an unbelievable ${current_price:.2f}! 🚀🔥\n"
+            f"Can you feel the excitement? 📈\n"
+            f"Time: {timestamp}\n"
+            f"#Ripple #XRP #XRPATH #ToTheMoon"
+        )
     elif is_volatility_alert:
         direction = "UP" if current_price > last_price else "DOWN"
         emoji = "📈" if direction == "UP" else "📉"
@@ -36,7 +41,11 @@ def generate_message(last_price, current_price, is_volatility_alert=False):
 def generate_daily_summary_message(daily_high, daily_low):
     """Generate a message summarizing the day's price range."""
     if daily_high is not None and daily_low is not None:
-        return f"📊 Daily Summary: Today’s XRP price ranged between ${daily_low:.5f} and ${daily_high:.5f}. \n#Ripple #XRP #XRPPriceAlerts"
+        return (
+            f"📊 Daily Recap: Today’s $XRP traded between a low of ${daily_low:.5f} and a high of ${daily_high:.5f}.\n"
+            f"What's next for XRP? Stay tuned! 📈💥\n"
+            f"#Ripple #XRP #XRPPriceAlerts"
+        )
     return None
 
 def generate_3_hour_summary(csv_file, current_price, rapidapi_key):
@@ -67,10 +76,11 @@ def generate_3_hour_summary(csv_file, current_price, rapidapi_key):
 
         # Generate the summary text
         summary_text = (
-            f"🔔🕒 #XRP Price in last 3 hours: {percent_change:+.2f}% change\n"
-            f"Support around ${support:.5f}\n"
-            f"Resistance around ${resistance:.5f}\n"
-            f"Last $XRP Price: ${current_price:.5f}\nTime: {timestamp}\n#Ripple #XRP #XRPPriceAlerts"
+            f"🔔🕒 3-Hour XRP Update: Price has changed by {percent_change:+.2f}%.\n"
+            f"Support level at: ${support:.5f}\n"
+            f"Resistance level at: ${resistance:.5f}\n"
+            f"Current Price: ${current_price:.5f}\nTime: {timestamp}\n"
+            f"#Ripple #XRP #XRPPriceAlerts"
         )
 
         # Generate the chart

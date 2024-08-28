@@ -26,6 +26,12 @@ last_summary_time = None  # Initialize to None
 last_volatility_check_time = None  # Initialize for tracking the last volatility check time
 last_rounded_price = None  # Initialize for tracking the last rounded price
 
+def generate_daily_summary_message(daily_high, daily_low):
+    """Generate a message summarizing the day's price range."""
+    if daily_high is not None and daily_low is not None:
+        return f"📊 Daily Summary: Today’s XRP price ranged between ${daily_low:.5f} and ${daily_high:.5f}. \n#Ripple #XRP #XRPPriceAlerts"
+    return None
+
 # Utility functions to load and save last rounded price
 def load_last_rounded_price():
     if os.path.exists(LAST_PRICE_FILE):
@@ -159,7 +165,7 @@ def main():
             # Generate and post 3-hour summary tweet with chart at specified times, with 5-minute grace period
             log_info(f"Checking 3-hour summary condition: Current Hour={current_hour}, Minute={current_minute}, Last Summary Hour={last_summary_time}")
             if current_hour in [hour for hour, _ in SUMMARY_TIMES] and (last_summary_time is None or last_summary_time != current_hour):
-                if current_minute < 5:  # Grace period of 15 minutes
+                if current_minute < 5:  # Grace period of 5 minutes
                     log_info("3-hour summary condition met. Attempting to generate and post.")
                     try:
                         summary_text, chart_filename = generate_3_hour_summary(CSV_FILE, full_price, RAPIDAPI_KEY)
@@ -197,6 +203,22 @@ def main():
                     last_checked_price = rounded_price
                 
                 last_volatility_check_time = current_time  # Update the last check time
+
+            # Daily summary posting at 11 PM
+            if current_hour == 2 and current_minute < 5:
+                if daily_high is not None and daily_low is not None:
+                    # Generate and post the daily summary
+                    summary_text = generate_daily_summary_message(daily_high, daily_low)
+                    try:
+                        post_tweet(client, summary_text)
+                        log_info(f"Daily summary tweet posted: {summary_text}")
+                    except Exception as e:
+                        log_error(f"Error posting daily summary tweet: {type(e).__name__} - {e}")
+
+                    # Reset daily high and low for the next day
+                    daily_high = None
+                    daily_low = None
+                    current_day = datetime.now().date()
 
             # Sleep for 1 minute before checking again for other conditions
             time.sleep(60)
