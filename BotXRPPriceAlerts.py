@@ -4,6 +4,12 @@ from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandle
 import pandas as pd
 from config import TELEGRAM_BOT_TOKEN  # Importing from config file
 
+# Ensure TELEGRAM_BOT_TOKEN is not None or an empty string
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set")
+
+updater = Updater(TELEGRAM_BOT_TOKEN)
+
 # File paths
 PRICE_DATA_FILE = 'xrp_price_data.csv'
 SIGNALS_LOG_FILE = 'live_trading_signals.log'
