@@ -1,13 +1,27 @@
+import os
 import requests
 import logging
 import pandas as pd
 import time
+import json
 from datetime import datetime
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID  # Import your Telegram credentials from the config
 
 # Set up logging to send trade signals to a file and Telegram
 logging.basicConfig(filename='live_trading_signals.log', level=logging.INFO, 
                     format='%(asctime)s - %(message)s')
+
+# Load user portfolios
+PORTFOLIO_FILE = 'user_portfolios.json'
+if os.path.exists(PORTFOLIO_FILE):
+    with open(PORTFOLIO_FILE, 'r') as f:
+        portfolios = json.load(f)
+else:
+    portfolios = {}
+
+def save_portfolios():
+    with open(PORTFOLIO_FILE, 'w') as f:
+        json.dump(portfolios, f)
 
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -31,16 +45,13 @@ take_profit_threshold = 0.0125  # 1.25% take profit
 sudden_drop_threshold = -0.02  # 2% drop in price in a short time
 cooldown_period = 5 * 60  # 5 minutes cooldown between trades
 
-# Initial capital for the live trading
-initial_capital = 10000.0
-capital = initial_capital
 position = None
 entry_price = None
 last_timestamp = None  # To track the last processed timestamp
 last_trade_time = None  # To track the last trade time
 
 def process_new_data(row, df):
-    global position, entry_price, capital, last_timestamp, last_trade_time
+    global position, entry_price, last_timestamp, last_trade_time
     
     price = float(row['last_price'])
     vwap = float(row['vwap'])
@@ -89,34 +100,54 @@ def process_new_data(row, df):
         position = 'long'
         entry_price = price
         last_trade_time = current_time
-        message = (
-            f"⚠️ *Buy Signal Triggered*\n"
-            f"Bought at: ${price:.5f} (VWAP: ${vwap:.5f})\n"
-            f"Time: {timestamp}"
-        )
-        logging.info(message)
-        send_telegram_message(message)
+
+        # Update the user's portfolio
+        if TELEGRAM_CHAT_ID in portfolios:
+            message = buy_signal(TELEGRAM_CHAT_ID, price)
+            if message:
+                logging.info(message)
+                send_telegram_message(message)
 
     # Check for overbought condition (Sell Signal) or take profit/stop loss
     if position == 'long':
         price_change = (price - entry_price) / entry_price
 
         if price_change >= take_profit_threshold or price_change <= stop_loss_threshold:
-            profit_loss = capital * price_change
-            capital += profit_loss
             last_trade_time = current_time
-            message = (
-                f"🚨 *Sell Signal Triggered*\n"
-                f"Sold at: ${price:.5f} (VWAP: ${vwap:.5f})\n"
-                f"Time: {timestamp}\n\n"
-                f"*Trade Result:* ${profit_loss:.2f}\n"
-                f"*Updated Capital:* ${capital:.2f}"
-            )
-            logging.info(message)
-            send_telegram_message(message)
+
+            # Update the user's portfolio
+            if TELEGRAM_CHAT_ID in portfolios:
+                message = sell_signal(TELEGRAM_CHAT_ID, price)
+                if message:
+                    logging.info(message)
+                    send_telegram_message(message)
 
             position = None
             entry_price = None
+
+# Function to handle buy signal and update user's portfolio
+def buy_signal(chat_id, price):
+    portfolio = portfolios.get(str(chat_id))
+    if portfolio and portfolio['position'] is None:  # No open position
+        portfolio['position'] = 'long'
+        portfolio['entry_price'] = price
+        save_portfolios()
+        return f"⚠️ *Buy Signal Triggered*\nBought at: ${price:.3f}\nCapital: ${portfolio['capital']:.2f}"
+    return None
+
+# Function to handle sell signal and update user's portfolio
+def sell_signal(chat_id, price):
+    portfolio = portfolios.get(str(chat_id))
+    if portfolio and portfolio['position'] == 'long':  # Must have an open position to sell
+        price_change = (price - portfolio['entry_price']) / portfolio['entry_price']
+        profit_loss = portfolio['capital'] * price_change
+        portfolio['capital'] += profit_loss
+        portfolio['profit_loss'] += profit_loss
+        portfolio['position'] = None  # Close position
+        portfolio['entry_price'] = None
+        save_portfolios()
+        return f"🚨 *Sell Signal Triggered*\nSold at: ${price:.3f}\nProfit/Loss: ${profit_loss:.2f}\nUpdated Capital: ${portfolio['capital']:.2f}"
+    return None
 
 # Main loop to process the live data
 def monitor_live_data(csv_file):
