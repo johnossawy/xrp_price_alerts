@@ -88,7 +88,7 @@ client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_
 api = get_twitter_api(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
 def main():
-    global daily_high, daily_low, current_day, last_summary_time, last_volatility_check_time, last_rounded_price
+    global daily_high, daily_low, current_day, last_summary_time, last_volatility_check_time, last_rounded_price, last_daily_summary_time
     last_full_price = None  # For logging purposes
     last_tweet_hour = None
     last_checked_price = None
@@ -200,7 +200,7 @@ def main():
                 last_volatility_check_time = current_time  # Update the last check time
 
             # Daily summary posting at 11 PM
-            if current_hour == 23 and current_minute < 5:
+            if current_hour == 3 and current_minute < 5:
                 if last_daily_summary_time is None or last_daily_summary_time.date() != current_day:
                     if daily_high is not None and daily_low is not None:
                         # Generate and post the daily summary
