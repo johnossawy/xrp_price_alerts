@@ -63,8 +63,13 @@ def process_new_data(row, df):
     else:
         time_since_last_trade = float('inf')  # No previous trade, so ignore cooldown
 
+    # Enforce cooldown period for all trades
+    if time_since_last_trade <= cooldown_period:
+        logging.info(f"Cooldown period active. Skipping trade. Time since last trade: {time_since_last_trade} seconds.")
+        return
+
     # Check for sudden price drop
-    if position is None and time_since_last_trade > cooldown_period:
+    if position is None:
         previous_price = df.iloc[-2]['last_price']  # Get the previous row's price
         price_drop = (price - previous_price) / previous_price
         
