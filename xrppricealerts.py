@@ -200,7 +200,7 @@ def main():
                 last_volatility_check_time = current_time  # Update the last check time
 
             # Daily summary posting at 11 PM
-            if current_hour == 3 and current_minute < 5:
+            if current_hour == 20 and current_minute >= 00 and current_minute < 5:
                 if last_daily_summary_time is None or last_daily_summary_time.date() != current_day:
                     if daily_high is not None and daily_low is not None:
                         # Generate and post the daily summary
