@@ -11,6 +11,8 @@ ACCESS_TOKEN_SECRET = os.getenv("ACCESS_TOKEN_SECRET")
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+BITSTAMP_KEY = os.getenv("BITSTAMP_KEY")
+BITSTAMP_SECRET = os.getenv("BITSTAMP_SECRET")
 
 # File to store the last tweet data
 LAST_TWEET_FILE = 'last_tweet.json'
