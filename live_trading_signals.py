@@ -93,6 +93,10 @@ def process_new_data(row, df):
 
     last_timestamp = timestamp
 
+    # Convert last_trade_time from string to datetime if it's not already a datetime object
+    if isinstance(last_trade_time, str):
+        last_trade_time = datetime.strptime(last_trade_time, "%Y-%m-%d %H:%M:%S")
+
     if last_trade_time is not None:
         time_since_last_trade = (current_time - last_trade_time).total_seconds()
     else:
