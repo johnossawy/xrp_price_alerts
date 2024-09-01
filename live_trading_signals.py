@@ -35,11 +35,11 @@ def send_telegram_message(message):
 
 # Define thresholds for the signals
 overbought_threshold = 0.01  # Price is 1% above VWAP
-oversold_threshold = -0.01   # Price is 1% below VWAP
+oversold_threshold = -0.019   # Price is 1% below VWAP
 
 # Set stop loss and take profit thresholds
 stop_loss_threshold = -0.02  # 2% stop loss
-take_profit_threshold = 0.0125  # 1.25% take profit
+take_profit_threshold = 0.015  # 1.5% take profit
 
 # Additional thresholds and parameters
 sudden_drop_threshold = -0.02  # 2% drop in price in a short time
