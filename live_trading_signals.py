@@ -2,12 +2,20 @@ import requests
 import logging
 import pandas as pd
 import time
-from datetime import datetime
+import json
+import os
+from datetime import datetime, timedelta
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID  # Import your Telegram credentials from the config
 
 # Set up logging to send trade signals to a file and Telegram
 logging.basicConfig(filename='live_trading_signals.log', level=logging.INFO, 
                     format='%(asctime)s - %(message)s')
+
+# Set the threshold for what is considered "recent" (e.g., 10 minutes)
+RECENT_THRESHOLD = timedelta(minutes=10)
+
+LAST_TRADE_TIME_FILE = 'last_trade_time.json'
+LAST_TIMESTAMP_FILE = 'last_timestamp.json'
 
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -18,6 +26,43 @@ def send_telegram_message(message):
     }
     response = requests.post(url, data=payload)
     return response.json()
+
+def initialize_last_trade_time_file():
+    """Initialize the last trade time file if it doesn't exist."""
+    if not os.path.exists(LAST_TRADE_TIME_FILE):
+        with open(LAST_TRADE_TIME_FILE, 'w') as f:
+            json.dump({"last_trade_time": None}, f)
+
+def load_last_trade_time():
+    """Load the last trade time from the JSON file."""
+    with open(LAST_TRADE_TIME_FILE, 'r') as f:
+        data = json.load(f)
+        if data['last_trade_time'] is not None:
+            return datetime.strptime(data['last_trade_time'], "%Y-%m-%d %H:%M:%S")
+        else:
+            return None
+
+def save_last_trade_time(last_trade_time):
+    """Save the last trade time to the JSON file."""
+    with open(LAST_TRADE_TIME_FILE, 'w') as f:
+        json.dump({"last_trade_time": last_trade_time.strftime("%Y-%m-%d %H:%M:%S")}, f)
+
+def initialize_last_timestamp_file():
+    """Initialize the last timestamp file if it doesn't exist."""
+    if not os.path.exists(LAST_TIMESTAMP_FILE):
+        with open(LAST_TIMESTAMP_FILE, 'w') as f:
+            json.dump({"last_timestamp": None}, f)
+
+def load_last_timestamp():
+    """Load the last timestamp from the JSON file."""
+    with open(LAST_TIMESTAMP_FILE, 'r') as f:
+        data = json.load(f)
+        return data.get("last_timestamp")
+
+def save_last_timestamp(last_timestamp):
+    """Save the last timestamp to the JSON file."""
+    with open(LAST_TIMESTAMP_FILE, 'w') as f:
+        json.dump({"last_timestamp": last_timestamp}, f)
 
 # Define thresholds for the signals
 overbought_threshold = 0.01  # Price is 1% above VWAP
@@ -36,8 +81,13 @@ initial_capital = 12800.0
 capital = initial_capital
 position = None
 entry_price = None
-last_timestamp = None  # To track the last processed timestamp
-last_trade_time = None  # To track the last trade time
+
+# Load the last trade time and last timestamp when the script starts
+initialize_last_trade_time_file()
+last_trade_time = load_last_trade_time()
+
+initialize_last_timestamp_file()
+last_timestamp = load_last_timestamp()
 
 def process_new_data(row, df):
     global position, entry_price, capital, last_timestamp, last_trade_time
@@ -56,6 +106,7 @@ def process_new_data(row, df):
 
     # Update last processed timestamp
     last_timestamp = timestamp
+    save_last_timestamp(last_timestamp)
 
     # Calculate time since last trade
     if last_trade_time is not None:
@@ -69,14 +120,17 @@ def process_new_data(row, df):
         price_drop = (price - previous_price) / previous_price
         
         if price_drop < sudden_drop_threshold:
-            # Detected sudden drop, do not buy
+            # Detected sudden drop, decide whether to notify
             message = (
                 f"⚠️ *Sudden Price Drop Detected!*\n"
                 f"Price dropped by {price_drop:.2%} from ${previous_price:.5f} to ${price:.5f}.\n"
                 f"_Skipping buy to avoid potential loss._"
             )
             logging.info(message)
-            send_telegram_message(message)
+
+            # Only send Telegram message if the data is recent
+            if datetime.now() - current_time <= RECENT_THRESHOLD:
+                send_telegram_message(message)
             return
 
     # Check for oversold condition (Buy Signal)
@@ -84,13 +138,16 @@ def process_new_data(row, df):
         position = 'long'
         entry_price = price
         last_trade_time = current_time
+        save_last_trade_time(last_trade_time)  # Save last trade time after buying
         message = (
             f"⚠️ *Buy Signal Triggered*\n"
             f"Bought at: ${price:.5f} (VWAP: ${vwap:.5f})\n"
             f"Time: {timestamp}"
         )
         logging.info(message)
-        send_telegram_message(message)
+
+        if datetime.now() - current_time <= RECENT_THRESHOLD:
+            send_telegram_message(message)
 
     # Check for overbought condition (Sell Signal) or take profit/stop loss
     if position == 'long':
@@ -100,6 +157,7 @@ def process_new_data(row, df):
             profit_loss = capital * price_change
             capital += profit_loss
             last_trade_time = current_time
+            save_last_trade_time(last_trade_time)  # Save last trade time after selling
             message = (
                 f"🚨 *Sell Signal Triggered*\n"
                 f"Sold at: ${price:.5f} (VWAP: ${vwap:.5f})\n"
@@ -108,7 +166,9 @@ def process_new_data(row, df):
                 f"*Updated Capital:* ${capital:.2f}"
             )
             logging.info(message)
-            send_telegram_message(message)
+
+            if datetime.now() - current_time <= RECENT_THRESHOLD:
+                send_telegram_message(message)
 
             position = None
             entry_price = None
@@ -117,13 +177,17 @@ def process_new_data(row, df):
 def monitor_live_data(csv_file):
     global last_timestamp
 
-    while True:
-        df = pd.read_csv(csv_file)
-        
-        for _, row in df.iterrows():
-            process_new_data(row, df)
-        
-        time.sleep(60)  # Wait for 1 minute before checking for new data
+    df = pd.read_csv(csv_file)
+    
+    # Only process data from the last 24 hours, or the last trade time, whichever is more recent
+    if last_timestamp:
+        cutoff_time = max(datetime.strptime(last_timestamp, "%Y-%m-%d %H:%M:%S"), datetime.now() - timedelta(hours=24))
+        df = df[df['timestamp'] >= cutoff_time.strftime("%Y-%m-%d %H:%M:%S")]
+
+    for _, row in df.iterrows():
+        process_new_data(row, df)
+    
+    time.sleep(60)  # Wait for 1 minute before checking for new data
 
 if __name__ == "__main__":
     monitor_live_data('xrp_price_data.csv')

@@ -50,8 +50,16 @@ def get_xrp_price():
 
 # Function to retrieve the last trading signal
 def get_last_signal():
-    with open(SIGNALS_LOG_FILE, 'r') as f:
-        lines = f.readlines()
+    with open(SIGNALS_LOG_FILE, 'rb') as f:
+        # Move the pointer to the end of the file
+        f.seek(0, os.SEEK_END)
+        file_size = f.tell()
+        buffer_size = 1024
+        if file_size < buffer_size:
+            buffer_size = file_size
+        f.seek(-buffer_size, os.SEEK_END)
+        buffer = f.read().decode('utf-8')
+        lines = buffer.splitlines()
         last_signal = lines[-1] if lines else "No signals logged yet."
     return last_signal
 
