@@ -16,6 +16,19 @@ RECENT_THRESHOLD = timedelta(minutes=10)
 
 LAST_TRADE_TIME_FILE = 'last_trade_time.json'
 LAST_TIMESTAMP_FILE = 'last_timestamp.json'
+PORTFOLIO_FILE = 'user_portfolios.json'
+
+# Load or initialize portfolios
+if os.path.exists(PORTFOLIO_FILE):
+    with open(PORTFOLIO_FILE, 'r') as f:
+        portfolios = json.load(f)
+else:
+    portfolios = {}
+
+# Save portfolios to a file
+def save_portfolios():
+    with open(PORTFOLIO_FILE, 'w') as f:
+        json.dump(portfolios, f)
 
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -76,12 +89,6 @@ take_profit_threshold = 0.015  # 1.25% take profit
 sudden_drop_threshold = -0.02  # 2% drop in price in a short time
 cooldown_period = 5 * 60  # 5 minutes cooldown between trades
 
-# Initial capital for the live trading
-initial_capital = 12800.0
-capital = initial_capital
-position = None
-entry_price = None
-
 # Load the last trade time and last timestamp when the script starts
 initialize_last_trade_time_file()
 last_trade_time = load_last_trade_time()
@@ -89,13 +96,28 @@ last_trade_time = load_last_trade_time()
 initialize_last_timestamp_file()
 last_timestamp = load_last_timestamp()
 
-def process_new_data(row, df):
-    global position, entry_price, capital, last_timestamp, last_trade_time
+def process_new_data(row, df, user_id):
+    global last_timestamp, last_trade_time
     
     price = float(row['last_price'])
     vwap = float(row['vwap'])
     timestamp = row['timestamp']
     volume = float(row['volume'])
+
+    # Ensure the user's portfolio exists
+    if user_id not in portfolios:
+        portfolios[user_id] = {
+            'capital': 12800.0,  # Default starting capital
+            'position': None,
+            'entry_price': None,
+            'profit_loss': 0.0
+        }
+        save_portfolios()
+
+    user_portfolio = portfolios[user_id]
+    capital = user_portfolio['capital']
+    position = user_portfolio['position']
+    entry_price = user_portfolio['entry_price']
 
     # Convert timestamp to datetime object for time-based calculations
     current_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
@@ -139,6 +161,11 @@ def process_new_data(row, df):
         entry_price = price
         last_trade_time = current_time
         save_last_trade_time(last_trade_time)  # Save last trade time after buying
+        
+        user_portfolio['position'] = position
+        user_portfolio['entry_price'] = entry_price
+        save_portfolios()  # Save portfolio changes
+        
         message = (
             f"⚠️ *Buy Signal Triggered*\n"
             f"Bought at: ${price:.5f} (VWAP: ${vwap:.5f})\n"
@@ -155,26 +182,29 @@ def process_new_data(row, df):
 
         if price_change >= take_profit_threshold or price_change <= stop_loss_threshold:
             profit_loss = capital * price_change
-            capital += profit_loss
+            user_portfolio['capital'] += profit_loss
+            user_portfolio['profit_loss'] += profit_loss
             last_trade_time = current_time
             save_last_trade_time(last_trade_time)  # Save last trade time after selling
+            
+            user_portfolio['position'] = None
+            user_portfolio['entry_price'] = None
+            save_portfolios()  # Save portfolio changes
+            
             message = (
                 f"🚨 *Sell Signal Triggered*\n"
                 f"Sold at: ${price:.5f} (VWAP: ${vwap:.5f})\n"
                 f"Time: {timestamp}\n\n"
                 f"*Trade Result:* ${profit_loss:.2f}\n"
-                f"*Updated Capital:* ${capital:.2f}"
+                f"*Updated Capital:* ${user_portfolio['capital']:.2f}"
             )
             logging.info(message)
 
             if datetime.now() - current_time <= RECENT_THRESHOLD:
                 send_telegram_message(message)
 
-            position = None
-            entry_price = None
-
 # Main loop to process the live data
-def monitor_live_data(csv_file):
+def monitor_live_data(csv_file, user_id):
     global last_timestamp
 
     df = pd.read_csv(csv_file)
@@ -185,9 +215,11 @@ def monitor_live_data(csv_file):
         df = df[df['timestamp'] >= cutoff_time.strftime("%Y-%m-%d %H:%M:%S")]
 
     for _, row in df.iterrows():
-        process_new_data(row, df)
+        process_new_data(row, df, user_id)
     
     time.sleep(60)  # Wait for 1 minute before checking for new data
 
 if __name__ == "__main__":
-    monitor_live_data('xrp_price_data.csv')
+    # Replace with actual user ID for testing
+    user_id = '757670515'
+    monitor_live_data('xrp_price_data.csv', user_id)

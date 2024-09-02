@@ -14,7 +14,7 @@ updater = Updater(TELEGRAM_BOT_TOKEN)
 # File paths
 PRICE_DATA_FILE = 'xrp_price_data.csv'
 SIGNALS_LOG_FILE = 'live_trading_signals.log'
-ALERTS_FILE = 'price_alerts.json'
+ALERTS_FILE = 'user_price_alerts.json'
 PORTFOLIO_FILE = 'user_portfolios.json'
 
 # Load or initialize portfolios
@@ -65,18 +65,23 @@ def get_last_signal():
 
 # Command handler to set an alert
 def set_alert(update: Update, context: CallbackContext) -> None:
-    chat_id = update.message.chat_id
+    chat_id = str(update.message.chat_id)
     try:
         target_price = float(context.args[0])
-        if chat_id not in price_alerts:
-            price_alerts[chat_id] = []
-
-        price_alerts[chat_id].append(target_price)
+        price_alerts[chat_id] = target_price
         save_price_alerts()
-
         update.message.reply_text(f"Alert set for XRP price at ${target_price:.3f}.")
     except (IndexError, ValueError):
         update.message.reply_text("Usage: /setalert <price>")
+
+# Command handler to view the user's set alert
+def view_alert(update: Update, context: CallbackContext) -> None:
+    chat_id = str(update.message.chat_id)
+    if chat_id in price_alerts:
+        alert_price = price_alerts[chat_id]
+        update.message.reply_text(f"Your current price alert is set at ${alert_price:.3f}.")
+    else:
+        update.message.reply_text("You have no price alerts set. Use /setalert <price> to set one.")
 
 # Command handler to set the user's starting capital
 def set_capital(update: Update, context: CallbackContext) -> None:
@@ -119,14 +124,15 @@ def sell_signal(chat_id, price):
     return None
 
 # Command handler to view the user's portfolio
+# Function to view the user's portfolio
 def view_portfolio(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.message.chat_id)
     portfolio = portfolios.get(chat_id)
     if portfolio:
         position = portfolio['position']
-        capital = portfolio['capital']
-        profit_loss = portfolio['profit_loss']
-        entry_price = portfolio['entry_price']
+        capital = portfolio['capital'] if portfolio['capital'] is not None else 0.0
+        profit_loss = portfolio['profit_loss'] if portfolio['profit_loss'] is not None else 0.0
+        entry_price = portfolio['entry_price'] if portfolio['entry_price'] is not None else "N/A"
 
         position_info = f"Open Position: {position} at ${entry_price:.3f}" if position else "No open positions."
         update.message.reply_text(
@@ -142,6 +148,7 @@ def start(update: Update, context: CallbackContext) -> None:
         [InlineKeyboardButton("🔔 Get Last Signal", callback_data='lastsignal')],
         [InlineKeyboardButton("💼 View Portfolio", callback_data='portfolio')],
         [InlineKeyboardButton("🔔 Set Price Alert", callback_data='setalert')],
+        [InlineKeyboardButton("🔍 View Price Alert", callback_data='viewalert')],
         [InlineKeyboardButton("ℹ️ About", callback_data='about')],
         [InlineKeyboardButton("❓ Help", callback_data='help')]
     ]
@@ -168,6 +175,7 @@ def help_command(update: Update, context: CallbackContext) -> None:
         "/setcapital <amount> - Set your starting capital\n"
         "/portfolio - View your portfolio\n"
         "/setalert <price> - Set a custom price alert\n"
+        "/viewalert - View your current price alert\n"
         "/about - Learn more about this bot\n"
         "/help - Show this help message"
     )
@@ -193,6 +201,15 @@ def button(update: Update, context: CallbackContext) -> None:
         query.edit_message_text(f"Last Trading Signal:\n{last_signal}")
     elif query.data == 'portfolio':
         view_portfolio(query, context)
+    elif query.data == 'setalert':
+        query.edit_message_text("Use /setalert <price> to set a custom price alert.")
+    elif query.data == 'viewalert':
+        chat_id = str(query.message.chat_id)
+        if chat_id in price_alerts:
+            alert_price = price_alerts[chat_id]
+            query.edit_message_text(f"Your current price alert is set at ${alert_price:.3f}.")
+        else:
+            query.edit_message_text("You have no price alerts set. Use /setalert <price> to set one.")
     elif query.data == 'about':
         about_text = (
             "XRP Price Alerts Bot:\n"
@@ -210,6 +227,7 @@ def button(update: Update, context: CallbackContext) -> None:
             "/setcapital <amount> - Set your starting capital\n"
             "/portfolio - View your portfolio\n"
             "/setalert <price> - Set a custom price alert\n"
+            "/viewalert - View your current price alert\n"
             "/about - Learn more about this bot\n"
             "/help - Show this help message"
         )
@@ -226,6 +244,7 @@ def main():
     dp.add_handler(CommandHandler("lastsignal", lastsignal))
     dp.add_handler(CommandHandler("portfolio", view_portfolio))
     dp.add_handler(CommandHandler("setalert", set_alert))
+    dp.add_handler(CommandHandler("viewalert", view_alert))
     dp.add_handler(CommandHandler("setcapital", set_capital))
     dp.add_handler(CommandHandler("help", help_command))
     dp.add_handler(CommandHandler("about", about_command))
