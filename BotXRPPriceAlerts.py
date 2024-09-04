@@ -1,3 +1,4 @@
+#BotXRPPriceAlerts.py
 import os
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler
@@ -15,12 +16,25 @@ def get_xrp_price():
     price = last_row['last_price']
     return price
 
-# Function to retrieve the last trading signal
+# Function to retrieve the last trading signal (buy/sell only)
 def get_last_signal():
     with open(SIGNALS_LOG_FILE, 'r') as f:
         lines = f.readlines()
-        last_signal = lines[-1] if lines else "No signals logged yet."
-    return last_signal
+        
+    # Search for the most recent Buy or Sell signal by scanning the lines in reverse
+    last_signal = None
+    for line in reversed(lines):
+        if "Buy Signal Triggered" in line or "Sell Signal Triggered" in line:
+            last_signal = line.strip()
+            # If it's a sell signal, also get the next few lines for the profit/loss and capital update
+            if "Sell Signal Triggered" in line:
+                index = lines.index(line)
+                # Grab the next few lines containing profit/loss and updated capital
+                additional_info = "".join(lines[index+1:index+4]).strip()
+                last_signal += f"\n{additional_info}"
+            break
+    
+    return last_signal if last_signal else "No buy or sell signals found."
 
 # Command handlers
 def start(update: Update, context: CallbackContext) -> None:

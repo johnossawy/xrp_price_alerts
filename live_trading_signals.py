@@ -14,9 +14,17 @@ def send_telegram_message(message):
     payload = {
         'chat_id': TELEGRAM_CHAT_ID,
         'text': message,
-        'parse_mode': 'Markdown'
+        'parse_mode': 'Markdown'  # You can switch to 'HTML' if there are formatting issues
     }
+    
     response = requests.post(url, data=payload)
+    
+    # Check if the message was successfully sent
+    if response.status_code == 200:
+        logging.info("Telegram message sent successfully.")
+    else:
+        logging.error(f"Failed to send Telegram message: {response.status_code}, {response.text}")
+    
     return response.json()
 
 # Define thresholds for the signals
@@ -61,7 +69,12 @@ def process_new_data(row):
         highest_price = price
         trailing_stop_price = entry_price * (1 - trailing_stop_loss_percentage)
         entry_time = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
-        message = f"⚠️ *Buy Signal Triggered*\nBought at: ${price:.5f} on {timestamp}"
+        
+        # Update Buy Signal Message Formatting
+        message = (
+            f"⚠️ *Buy Signal Triggered*\n"
+            f"Bought at: ${price:.5f} on {timestamp}"
+        )
         logging.info(message)
         send_telegram_message(message)
 
@@ -81,6 +94,7 @@ def process_new_data(row):
             exit_time = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
             time_held = exit_time - entry_time
 
+            # Update Sell Signal Message Formatting
             message = (
                 f"🚨 *Sell Signal Triggered:*\n"
                 f"Sold at ${price:.5f} on {timestamp}\n"
