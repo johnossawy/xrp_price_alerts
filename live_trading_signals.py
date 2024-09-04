@@ -38,9 +38,10 @@ entry_price = None
 trailing_stop_price = None  # Variable to track trailing stop price
 highest_price = None  # Variable to track the highest price since entry
 last_timestamp = None  # To track the last processed timestamp
+entry_time = None  # To track the entry time of the position
 
 def process_new_data(row):
-    global position, entry_price, capital, trailing_stop_price, highest_price, last_timestamp
+    global position, entry_price, capital, trailing_stop_price, highest_price, last_timestamp, entry_time
     
     price = float(row['last_price'])
     vwap = float(row['vwap'])
@@ -59,8 +60,8 @@ def process_new_data(row):
         entry_price = price
         highest_price = price
         trailing_stop_price = entry_price * (1 - trailing_stop_loss_percentage)
-        message = f"⚠️ Buy Signal Triggered: Bought at ${price:.5f} (VWAP: ${vwap:.5f}) on {timestamp}\n"
-        message += f"   Initial Trailing Stop Price set at ${trailing_stop_price:.5f}"
+        entry_time = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+        message = f"⚠️ *Buy Signal Triggered*\nBought at: ${price:.5f} on {timestamp}"
         logging.info(message)
         send_telegram_message(message)
 
@@ -70,19 +71,21 @@ def process_new_data(row):
         if price > highest_price:
             highest_price = price
             trailing_stop_price = highest_price * (1 - trailing_stop_loss_percentage)
-            message = f"🔄 Trailing Stop Updated: New Stop Price is ${trailing_stop_price:.5f} (Highest Price: ${highest_price:.5f})"
-            logging.info(message)
-            #send_telegram_message(message)
+            logging.info(f"🔄 Trailing Stop Updated: New Stop Price is ${trailing_stop_price:.5f} (Highest Price: ${highest_price:.5f})")
 
         # Check if the current price hits the trailing stop or the stop loss/take profit conditions
         if price <= trailing_stop_price or price >= entry_price * (1 + take_profit_threshold) or price <= entry_price * (1 + stop_loss_threshold):
             price_change = (price - entry_price) / entry_price
             profit_loss = capital * price_change
             capital += profit_loss
+            exit_time = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+            time_held = exit_time - entry_time
+
             message = (
-                f"🚨 Sell Signal Triggered: Sold at ${price:.5f} (VWAP: ${vwap:.5f}) on {timestamp}\n"
-                f"   Trade Result: Profit/Loss = ${profit_loss:.2f}\n"
-                f"   Updated Capital: ${capital:.2f}"
+                f"🚨 *Sell Signal Triggered:*\n"
+                f"Sold at ${price:.5f} on {timestamp}\n"
+                f"Profit/Loss = ${profit_loss:.2f}, Time Held = {time_held}\n"
+                f"Updated Capital: ${capital:.2f}"
             )
             logging.info(message)
             send_telegram_message(message)
@@ -92,6 +95,7 @@ def process_new_data(row):
             entry_price = None
             trailing_stop_price = None
             highest_price = None
+            entry_time = None
 
 # Main loop to process the live data
 def monitor_live_data(csv_file):
