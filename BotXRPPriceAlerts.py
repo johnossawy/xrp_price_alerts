@@ -32,6 +32,10 @@ def get_last_signal():
         if "Telegram message sent successfully" in line:
             continue
 
+        # Stop capturing if we hit a new Buy/Sell signal after capturing the first one
+        if capture_signal and ("Buy Signal Triggered" in line or "Sell Signal Triggered" in line):
+            break
+
         # Start capturing if we hit a Buy or Sell signal
         if "Buy Signal Triggered" in line or "Sell Signal Triggered" in line:
             capture_signal = True
@@ -39,10 +43,6 @@ def get_last_signal():
         # If capturing, prepend the line to the last_signal list
         if capture_signal:
             last_signal.insert(0, line)
-
-        # Stop capturing once we hit a new "Buy" or "Sell" signal and have collected its full block
-        if capture_signal and ("Buy Signal Triggered" in line or "Sell Signal Triggered" in line) and len(last_signal) > 1:
-            break
 
     # Join the lines and return the full last signal
     return "\n".join(last_signal) if last_signal else "No buy or sell signals found."
