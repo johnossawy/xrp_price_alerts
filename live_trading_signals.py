@@ -2,12 +2,16 @@ import requests
 import logging
 import pandas as pd
 import time
+import os
 from datetime import datetime
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID  # Import your Telegram credentials from the config
 
 # Set up logging to send trade signals to a file and Telegram
 logging.basicConfig(filename='live_trading_signals.log', level=logging.INFO, 
                     format='%(asctime)s - %(message)s')
+
+print(f"Bot Token: {os.getenv('TELEGRAM_BOT_TOKEN')}")
+print(f"Chat ID: {os.getenv('TELEGRAM_CHAT_ID')}")
 
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
