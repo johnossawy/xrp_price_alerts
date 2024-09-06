@@ -26,16 +26,22 @@ def get_last_signal():
 
     # Go through the log file in reverse to capture the last Buy or Sell signal block
     for line in reversed(lines):
+        line = line.strip()
+
+        # Ignore lines like "Telegram message sent successfully"
+        if "Telegram message sent successfully" in line:
+            continue
+
         # Start capturing if we hit a Buy or Sell signal
         if "Buy Signal Triggered" in line or "Sell Signal Triggered" in line:
             capture_signal = True
 
         # If capturing, prepend the line to the last_signal list
         if capture_signal:
-            last_signal.insert(0, line.strip())  # Insert at the start to maintain order
+            last_signal.insert(0, line)
 
-        # Stop capturing once we hit the preceding message line or a new signal
-        if capture_signal and ("Telegram message sent successfully" in line):
+        # Stop capturing once we hit a new "Buy" or "Sell" signal and have collected its full block
+        if capture_signal and ("Buy Signal Triggered" in line or "Sell Signal Triggered" in line) and len(last_signal) > 1:
             break
 
     # Join the lines and return the full last signal
