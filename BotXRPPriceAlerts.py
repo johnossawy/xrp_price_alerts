@@ -1,7 +1,7 @@
 #BotXRPPriceAlerts.py
 import os
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler
+from telegram.ext import Updater, CommandHandler, CallbackContext
 import pandas as pd
 from config import TELEGRAM_BOT_TOKEN  # Importing from config file
 
@@ -20,21 +20,26 @@ def get_xrp_price():
 def get_last_signal():
     with open(SIGNALS_LOG_FILE, 'r') as f:
         lines = f.readlines()
-        
-    # Search for the most recent Buy or Sell signal by scanning the lines in reverse
-    last_signal = None
+
+    last_signal = []
+    capture_signal = False
+
+    # Go through the log file in reverse to capture the last Buy or Sell signal block
     for line in reversed(lines):
+        # Start capturing if we hit a Buy or Sell signal
         if "Buy Signal Triggered" in line or "Sell Signal Triggered" in line:
-            last_signal = line.strip()
-            # If it's a sell signal, also get the next few lines for the profit/loss and capital update
-            if "Sell Signal Triggered" in line:
-                index = lines.index(line)
-                # Grab the next few lines containing profit/loss and updated capital
-                additional_info = "".join(lines[index+1:index+4]).strip()
-                last_signal += f"\n{additional_info}"
+            capture_signal = True
+
+        # If capturing, prepend the line to the last_signal list
+        if capture_signal:
+            last_signal.insert(0, line.strip())  # Insert at the start to maintain order
+
+        # Stop capturing once we hit the preceding message line or a new signal
+        if capture_signal and ("Telegram message sent successfully" in line):
             break
-    
-    return last_signal if last_signal else "No buy or sell signals found."
+
+    # Join the lines and return the full last signal
+    return "\n".join(last_signal) if last_signal else "No buy or sell signals found."
 
 # Command handlers
 def start(update: Update, context: CallbackContext) -> None:
