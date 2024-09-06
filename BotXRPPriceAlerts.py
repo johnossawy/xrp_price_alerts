@@ -28,7 +28,7 @@ def get_last_signal():
     for line in reversed(lines):
         line = line.strip()
 
-        # Ignore lines like "Telegram message sent successfully"
+        # Ignore "Telegram message sent successfully"
         if "Telegram message sent successfully" in line:
             continue
 
