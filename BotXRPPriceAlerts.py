@@ -22,34 +22,25 @@ def get_last_signal():
         lines = f.readlines()
 
     last_signal = []
-    capture_signal = False
 
-    # Go through the log file in reverse to capture the last Buy or Sell signal block
-    for line in reversed(lines):
-        line = line.strip()
+    # Go through the log file in reverse to find the last Buy or Sell signal
+    for i in range(len(lines) - 1, -1, -1):
+        line = lines[i].strip()
 
-        # Ignore irrelevant lines like trailing stop updates or successful messages
-        if "Telegram message sent successfully" in line or "Trailing Stop Updated" in line:
-            continue
-
-        # Stop capturing if we hit a new Buy/Sell signal after capturing the first one
-        if capture_signal and ("Buy Signal Triggered" in line or "Sell Signal Triggered" in line):
+        # Check for a Sell signal
+        if "🚨 *Sell Signal Triggered:*" in line:
+            # Capture this line and the next 3 lines
+            last_signal = lines[i:i + 4]
             break
 
-        # Start capturing if we hit a Buy or Sell signal
-        if "Buy Signal Triggered" in line or "Sell Signal Triggered" in line:
-            capture_signal = True
-
-        # If capturing, add the line to the last_signal list
-        if capture_signal:
-            last_signal.append(line)
-
-        # Stop after capturing a complete signal (after "Updated Capital" or "Bought at:")
-        if capture_signal and ("Updated Capital" in line or "Bought at:" in line):
+        # Check for a Buy signal
+        elif "⚠️ *Buy Signal Triggered*" in line:
+            # Capture this line and the next line
+            last_signal = lines[i:i + 2]
             break
 
-    # Join the lines and return the full last signal
-    return "\n".join(last_signal) if last_signal else "No buy or sell signals found."
+    # Return the last signal or a default message if none found
+    return "".join(last_signal) if last_signal else "No buy or sell signals found."
 
 # Command handlers
 def start(update: Update, context: CallbackContext) -> None:
