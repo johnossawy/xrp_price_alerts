@@ -4,27 +4,32 @@ import pandas as pd
 import time
 import os
 from datetime import datetime
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID  # Import your Telegram credentials from the config
+# import pytz  # Uncomment if using timezone handling
+from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
-# Set up logging to send trade signals to a file and Telegram
-logging.basicConfig(filename='live_trading_signals.log', level=logging.INFO, 
-                    format='%(asctime)s - %(message)s')
+# Set up logging with custom date format
+logging.basicConfig(
+    filename='live_trading_signals.log',
+    level=logging.INFO, 
+    format='%(asctime)s - %(message)s',
+    datefmt='%b %d, %Y %I:%M:%S %p'
+)
+logger = logging.getLogger(__name__)
 
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TELEGRAM_CHAT_ID,
         'text': message,
-        'parse_mode': 'Markdown'  # You can switch to 'HTML' if there are formatting issues
+        'parse_mode': 'Markdown'
     }
     
     response = requests.post(url, data=payload)
     
-    # Check if the message was successfully sent
     if response.status_code == 200:
-        logging.info("Telegram message sent successfully.")
+        logger.info("Telegram message sent successfully.")
     else:
-        logging.error(f"Failed to send Telegram message: {response.status_code}, {response.text}")
+        logger.error(f"Failed to send Telegram message: {response.status_code}, {response.text}")
     
     return response.json()
 
@@ -52,77 +57,111 @@ entry_time = None  # To track the entry time of the position
 def process_new_data(row):
     global position, entry_price, capital, trailing_stop_price, highest_price, last_timestamp, entry_time
     
-    price = float(row['last_price'])
-    vwap = float(row['vwap'])
-    timestamp = row['timestamp']
+    try:
+        price = float(row['last_price'])
+        vwap = float(row['vwap'])
+        timestamp = row['timestamp']
 
-    # Skip if this timestamp has already been processed
-    if last_timestamp is not None and timestamp <= last_timestamp:
-        return
+        # Skip if this timestamp has already been processed
+        if last_timestamp is not None and timestamp <= last_timestamp:
+            return
 
-    # Update last processed timestamp
-    last_timestamp = timestamp
+        # Update last processed timestamp
+        last_timestamp = timestamp
 
-    # Check for oversold condition (Buy Signal)
-    if (price - vwap) / vwap <= oversold_threshold and position is None:
-        position = 'long'
-        entry_price = price
-        highest_price = price
-        trailing_stop_price = entry_price * (1 - trailing_stop_loss_percentage)
-        entry_time = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
-        
-        # Update Buy Signal Message Formatting
-        message = (
-            f"⚠️ *Buy Signal Triggered*\n"
-            f"Bought at: ${price:.5f} on {timestamp}"
-        )
-        logging.info(message)
-        send_telegram_message(message)
+        # Parse and format timestamp
+        timestamp_dt = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+        formatted_timestamp = timestamp_dt.strftime('%B %d, %Y at %I:%M %p')
 
-    # Check for trailing stop adjustment and overbought condition (Sell Signal) or take profit/stop loss
-    if position == 'long':
-        # Update the highest price since the entry
-        if price > highest_price:
+        # Check for oversold condition (Buy Signal)
+        if (price - vwap) / vwap <= oversold_threshold and position is None:
+            position = 'long'
+            entry_price = price
             highest_price = price
-            trailing_stop_price = highest_price * (1 - trailing_stop_loss_percentage)
-            logging.info(f"🔄 Trailing Stop Updated: New Stop Price is ${trailing_stop_price:.5f} (Highest Price: ${highest_price:.5f})")
+            trailing_stop_price = entry_price * (1 - trailing_stop_loss_percentage)
+            entry_time = timestamp_dt
 
-        # Check if the current price hits the trailing stop or the stop loss/take profit conditions
-        if price <= trailing_stop_price or price >= entry_price * (1 + take_profit_threshold) or price <= entry_price * (1 + stop_loss_threshold):
-            price_change = (price - entry_price) / entry_price
-            profit_loss = capital * price_change
-            capital += profit_loss
-            exit_time = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
-            time_held = exit_time - entry_time
-
-            # Update Sell Signal Message Formatting
             message = (
-                f"🚨 *Sell Signal Triggered:*\n"
-                f"Sold at ${price:.5f} on {timestamp}\n"
-                f"Profit/Loss = ${profit_loss:.2f}, Time Held = {time_held}\n"
-                f"Updated Capital: ${capital:.2f}"
+                f"⚠️ *Buy Signal Triggered*\n"
+                f"Bought at: ${price:.5f} on {formatted_timestamp}"
             )
-            logging.info(message)
+            logger.info(message)
             send_telegram_message(message)
 
-            # Reset position-related variables
-            position = None
-            entry_price = None
-            trailing_stop_price = None
-            highest_price = None
-            entry_time = None
+        # Check for trailing stop adjustment and overbought condition (Sell Signal) or take profit/stop loss
+        if position == 'long':
+            # Update the highest price since the entry
+            if price > highest_price:
+                highest_price = price
+                trailing_stop_price = highest_price * (1 - trailing_stop_loss_percentage)
+                logger.info(
+                    f"🔄 Trailing Stop Updated: New Stop Price is ${trailing_stop_price:.5f} "
+                    f"(Highest Price: ${highest_price:.5f})"
+                )
+
+            # Check exit conditions
+            if (price <= trailing_stop_price or 
+                price >= entry_price * (1 + take_profit_threshold) or 
+                price <= entry_price * (1 + stop_loss_threshold)):
+                
+                price_change = (price - entry_price) / entry_price
+                profit_loss = capital * price_change
+                capital += profit_loss
+                exit_time = timestamp_dt
+                time_held = exit_time - entry_time
+
+                # Format time held
+                hours, remainder = divmod(time_held.total_seconds(), 3600)
+                minutes, seconds = divmod(remainder, 60)
+                time_held_formatted = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+
+                message = (
+                    f"🚨 *Sell Signal Triggered:*\n"
+                    f"Sold at ${price:.5f} on {formatted_timestamp}\n"
+                    f"Profit/Loss = ${profit_loss:.2f}, Time Held = {time_held_formatted}\n"
+                    f"Updated Capital: ${capital:.2f}"
+                )
+                logger.info(message)
+                send_telegram_message(message)
+
+                # Reset position-related variables
+                position = None
+                entry_price = None
+                trailing_stop_price = None
+                highest_price = None
+                entry_time = None
+
+    except Exception as e:
+        logger.error(f"An error occurred while processing data: {e}")
 
 # Main loop to process the live data
 def monitor_live_data(csv_file):
     global last_timestamp
 
     while True:
-        df = pd.read_csv(csv_file)
-        
+        try:
+            df = pd.read_csv(csv_file)
+        except FileNotFoundError:
+            logger.error(f"File {csv_file} not found.")
+            time.sleep(60)
+            continue
+        except pd.errors.EmptyDataError:
+            logger.error(f"File {csv_file} is empty.")
+            time.sleep(60)
+            continue
+        except Exception as e:
+            logger.error(f"An error occurred while reading the file: {e}")
+            time.sleep(60)
+            continue
+
+        # Process only new data
+        if last_timestamp is not None:
+            df = df[df['timestamp'] > last_timestamp]
+
         for _, row in df.iterrows():
             process_new_data(row)
-        
-        time.sleep(60)  # Wait for 1 minute before checking for new data
+
+        time.sleep(60)
 
 if __name__ == "__main__":
     monitor_live_data('xrp_price_data.csv')

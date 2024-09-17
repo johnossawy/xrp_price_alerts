@@ -1,5 +1,6 @@
 #BotXRPPriceAlerts.py
 import os
+import re
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 import pandas as pd
@@ -16,31 +17,48 @@ def get_xrp_price():
     price = last_row['last_price']
     return price
 
-# Function to retrieve the last trading signal (buy/sell only)
 def get_last_signal():
-    with open(SIGNALS_LOG_FILE, 'r') as f:
-        lines = f.readlines()
+    """
+    Retrieves the last buy or sell signal from the log file using regex for details.
 
-    last_signal = []
+    Returns:
+        str: The last buy or sell signal message.
+    """
+    try:
+        if not os.path.exists(SIGNALS_LOG_FILE):
+            return "Signals log file not found."
 
-    # Go through the log file in reverse to find the last Buy or Sell signal
-    for i in range(len(lines) - 1, -1, -1):
-        line = lines[i].strip()
+        # Patterns to identify signals and details
+        buy_pattern = re.compile(r'⚠️ \*Buy Signal Triggered\*')
+        sell_pattern = re.compile(r'🚨 \*Sell Signal Triggered:\*')
+        detail_patterns = [
+            re.compile(r'Bought at:.*'),
+            re.compile(r'Sold at.*'),
+            re.compile(r'Profit/Loss.*'),
+            re.compile(r'Updated Capital.*'),
+            re.compile(r'Time Held.*')
+        ]
 
-        # Check for a Sell signal
-        if "🚨 *Sell Signal Triggered:*" in line:
-            # Capture this line and the next 3 lines
-            last_signal = lines[i:i + 4]
-            break
+        with open(SIGNALS_LOG_FILE, 'r') as f:
+            lines = f.readlines()
 
-        # Check for a Buy signal
-        elif "⚠️ *Buy Signal Triggered*" in line:
-            # Capture this line and the next line
-            last_signal = lines[i:i + 2]
-            break
-
-    # Return the last signal or a default message if none found
-    return "".join(last_signal) if last_signal else "No buy or sell signals found."
+        for i in range(len(lines) - 1, -1, -1):
+            line = lines[i].strip()
+            if buy_pattern.search(line) or sell_pattern.search(line):
+                signal_lines = [line]
+                # Look ahead for detail lines
+                j = i + 1
+                while j < len(lines):
+                    next_line = lines[j].strip()
+                    if any(pattern.search(next_line) for pattern in detail_patterns):
+                        signal_lines.append(next_line)
+                        j += 1
+                    else:
+                        break
+                return "\n".join(signal_lines)
+        return "No buy or sell signals found."
+    except Exception as e:
+        return f"An error occurred while reading the signals: {e}"
 
 # Command handlers
 def start(update: Update, context: CallbackContext) -> None:
