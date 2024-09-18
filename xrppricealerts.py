@@ -1,8 +1,10 @@
+# xrppricealerts.py
+
 import csv
 import time
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.twitter import get_twitter_api, get_twitter_client, post_tweet, upload_media
 from app.fetcher import fetch_xrp_price
 from app.xrp_messaging import generate_message, get_percent_change, generate_daily_summary_message, generate_3_hour_summary
@@ -17,15 +19,6 @@ SUMMARY_TIMES = {(0, 0), (3, 0), (6, 0), (9, 0), (12, 0), (15, 0), (18, 0), (21,
 CSV_FILE = 'xrp_price_data.csv'
 LAST_SUMMARY_FILE = 'last_summary_time.json'
 LAST_PRICE_FILE = 'last_rounded_price.json'
-
-# Initialize tracking variables
-daily_high = None
-daily_low = None
-current_day = datetime.now().date()
-last_summary_time = None  # Initialize to None
-last_volatility_check_time = None  # Initialize for tracking the last volatility check time
-last_rounded_price = None  # Initialize for tracking the last rounded price
-last_daily_summary_time = None # Initialize for tracking the last daily summary
 
 # Utility functions to load and save last rounded price
 def load_last_rounded_price():
@@ -49,17 +42,36 @@ def save_last_rounded_price(price_value):
 def load_last_summary_time():
     if os.path.exists(LAST_SUMMARY_FILE):
         with open(LAST_SUMMARY_FILE, 'r') as file:
-            data = json.load(file)
-            return data.get('last_summary_time')
+            try:
+                data = json.load(file)
+                # Parse the time string back to a datetime object
+                time_str = data.get('last_summary_time')
+                if isinstance(time_str, str) and time_str.strip():
+                    return datetime.fromisoformat(time_str)
+                else:
+                    log_warning("No valid 'last_summary_time' found in the JSON file.")
+            except json.JSONDecodeError as e:
+                log_error(f"Error decoding JSON from {LAST_SUMMARY_FILE}: {type(e).__name__} - {e}")
+    else:
+        log_warning(f"{LAST_SUMMARY_FILE} does not exist.")
     return None
 
 def save_last_summary_time(time_value):
     with open(LAST_SUMMARY_FILE, 'w') as file:
-        json.dump({'last_summary_time': time_value}, file)
+        # Convert the datetime object to ISO format string
+        json.dump({'last_summary_time': time_value.isoformat()}, file)
 
-# Load the last rounded price and last summary time at the start of the script
+# Initialize tracking variables
+daily_high = None
+daily_low = None
+current_day = datetime.now(timezone.utc).date()
+last_volatility_check_time = None  # Initialize for tracking the last volatility check time
 last_rounded_price = load_last_rounded_price()
 last_summary_time = load_last_summary_time()
+last_daily_summary_time = None  # Ensure this is initialized
+
+client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+api = get_twitter_api(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 
 def append_to_csv(timestamp, price_data, percent_change=None):
     with open(CSV_FILE, 'a', newline='') as csvfile:
@@ -84,9 +96,6 @@ def append_to_csv(timestamp, price_data, percent_change=None):
             percent_change
         ])
 
-client = get_twitter_client(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-api = get_twitter_api(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-
 def main():
     global daily_high, daily_low, current_day, last_summary_time, last_volatility_check_time, last_rounded_price, last_daily_summary_time
     last_full_price = None  # For logging purposes
@@ -95,12 +104,20 @@ def main():
 
     while True:
         try:
-            current_time = datetime.now()
+            # Use UTC time for consistency
+            current_time = datetime.now(timezone.utc)
             current_hour = current_time.hour
             current_minute = current_time.minute
             timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
+            current_day = current_time.date()  # Update current_day each iteration
 
             log_info(f"Checking time: Hour={current_hour}, Minute={current_minute}")
+
+            # Reset daily high and low at the start of a new day
+            if last_daily_summary_time is not None and last_daily_summary_time.date() < current_day:
+                daily_high = None
+                daily_low = None
+                log_info("New day detected, reset daily_high and daily_low.")
 
             # Fetch price data
             price_data = fetch_xrp_price()
@@ -158,8 +175,8 @@ def main():
                     log_warning("last_rounded_price is None, skipping hourly tweet.")
 
             # Generate and post 3-hour summary tweet with chart at specified times, with 5-minute grace period
-            log_info(f"Checking 3-hour summary condition: Current Hour={current_hour}, Minute={current_minute}, Last Summary Hour={last_summary_time}")
-            if current_hour in [hour for hour, _ in SUMMARY_TIMES] and (last_summary_time is None or last_summary_time != current_hour):
+            log_info(f"Checking 3-hour summary condition: Current Hour={current_hour}, Minute={current_minute}, Last Summary Time={last_summary_time}")
+            if current_hour in [hour for hour, _ in SUMMARY_TIMES] and (last_summary_time is None or last_summary_time.hour != current_hour):
                 if current_minute < 5:  # Grace period of 5 minutes
                     log_info("3-hour summary condition met. Attempting to generate and post.")
                     try:
@@ -169,7 +186,7 @@ def main():
                                 media_id = upload_media(api, chart_filename)
                                 post_tweet(client, summary_text, media_id)
                                 log_info(f"3-hour summary tweet with chart posted: {summary_text}")
-                                last_summary_time = current_hour  # Update the hour after posting
+                                last_summary_time = current_time  # Update the time after posting
                                 save_last_summary_time(last_summary_time)  # Save the updated summary time
                                 log_info(f"Updated last_summary_time to: {last_summary_time}")
                             except Exception as e:
@@ -178,6 +195,8 @@ def main():
                             log_error("3-hour summary generation failed: No summary text or chart filename generated.")
                     except Exception as e:
                         log_error(f"Error during 3-hour summary generation: {type(e).__name__} - {e}")
+                else:
+                    log_info("Not within the 5-minute grace period for 3-hour summary.")
             else:
                 log_info("3-hour summary condition not met.")
 
@@ -186,7 +205,7 @@ def main():
                 log_info(f"Checking for volatility: last_checked_price={last_checked_price}, full_price={full_price}")
                 if last_checked_price is not None:
                     percent_change = get_percent_change(last_checked_price, full_price)
-                    if abs(rounded_price - last_checked_price) > VOLATILITY_THRESHOLD:
+                    if abs(percent_change) >= VOLATILITY_THRESHOLD * 100:  # Convert threshold to percentage
                         tweet_text = generate_message(last_checked_price, rounded_price, is_volatility_alert=True)
                         try:
                             post_tweet(client, tweet_text)
@@ -199,9 +218,9 @@ def main():
                 
                 last_volatility_check_time = current_time  # Update the last check time
 
-            # Daily summary posting at 11 PM
-            if current_hour == 20 and current_minute >= 00 and current_minute < 5:
-                if last_daily_summary_time is None or last_daily_summary_time.date() != current_day:
+            # Daily summary posting at 11 PM UTC
+            if current_hour == 23 and current_minute >= 0 and current_minute < 5:
+                if last_daily_summary_time is None or last_daily_summary_time.date() < current_day:
                     if daily_high is not None and daily_low is not None:
                         # Generate and post the daily summary
                         summary_text = generate_daily_summary_message(daily_high, daily_low)
@@ -213,11 +232,17 @@ def main():
 
                         # Update the last summary time to prevent multiple posts
                         last_daily_summary_time = current_time
+                        log_info(f"Updated last_daily_summary_time to: {last_daily_summary_time}")
 
                         # Reset daily high and low for the next day
                         daily_high = None
                         daily_low = None
-                        current_day = datetime.now().date()
+                    else:
+                        log_warning("Daily high and low are None, cannot post daily summary.")
+                else:
+                    log_info("Daily summary already posted for today.")
+            else:
+                log_info("Not time for daily summary yet.")
 
             # Sleep for 1 minute before checking again for other conditions
             time.sleep(60)
