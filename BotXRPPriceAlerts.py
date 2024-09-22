@@ -1,6 +1,8 @@
-#BotXRPPriceAlerts.py
+# BotXRPPriceAlerts.py
+
 import os
 import re
+import logging
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 import pandas as pd
@@ -10,19 +12,31 @@ from config import TELEGRAM_BOT_TOKEN  # Importing from config file
 PRICE_DATA_FILE = 'xrp_price_data.csv'
 SIGNALS_LOG_FILE = 'live_trading_signals.log'
 
+# Configure logging for BotXRPPriceAlerts.py
+logging.basicConfig(
+    filename='bot_xrp_price_alerts.log',  # Use a distinct log file
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'  # Align with trading_bot.py's date format
+)
+
 # Function to retrieve the current XRP price
 def get_xrp_price():
-    df = pd.read_csv(PRICE_DATA_FILE)
-    last_row = df.iloc[-1]
-    price = last_row['last_price']
-    return price
+    try:
+        df = pd.read_csv(PRICE_DATA_FILE)
+        last_row = df.iloc[-1]
+        price = float(last_row['last_price'])
+        return price
+    except Exception as e:
+        logging.error(f"Error retrieving XRP price: {e}")
+        return "Error retrieving price."
 
 def get_last_signal():
     """
-    Retrieves the last buy or sell signal from the log file using regex for details.
+    Retrieves the last buy or sell signal from the log file, including its details.
 
     Returns:
-        str: The last buy or sell signal message.
+        str: The complete last buy or sell signal message.
     """
     try:
         if not os.path.exists(SIGNALS_LOG_FILE):
@@ -40,19 +54,29 @@ def get_last_signal():
         ]
 
         with open(SIGNALS_LOG_FILE, 'r') as f:
-            # Read the file in reverse order
-            for line in reversed(f.readlines()):
-                line = line.strip()
-                if buy_pattern.search(line) or sell_pattern.search(line):
-                    signal_lines = [line]
-                    # Look ahead for detail lines
-                    # Since we're reading in reverse, we need to collect preceding lines
-                    # This requires buffering a few lines
-                    # For simplicity, you might limit the number of lines to look back
-                    # Alternatively, consider using a more efficient log processing method
-                    return "\n".join(signal_lines)
+            lines = f.readlines()
+
+        # Iterate through the lines in reverse to find the last signal
+        for i in range(len(lines) - 1, -1, -1):
+            line = lines[i].strip()
+            if buy_pattern.search(line) or sell_pattern.search(line):
+                signal_lines = [line]
+                # Collect detail lines that follow the signal trigger
+                j = i + 1
+                while j < len(lines):
+                    next_line = lines[j].strip()
+                    # If the next line matches any of the detail patterns, include it
+                    if any(pattern.search(next_line) for pattern in detail_patterns):
+                        signal_lines.append(next_line)
+                        j += 1
+                    else:
+                        break
+                # Reverse the collected lines to maintain chronological order
+                signal_lines_reversed = list(reversed(signal_lines))
+                return "\n".join(signal_lines_reversed)
         return "No buy or sell signals found."
     except Exception as e:
+        logging.error(f"An error occurred while reading the signals: {e}")
         return f"An error occurred while reading the signals: {e}"
 
 # Command handlers
@@ -61,7 +85,10 @@ def start(update: Update, context: CallbackContext) -> None:
 
 def price(update: Update, context: CallbackContext) -> None:
     price = get_xrp_price()
-    update.message.reply_text(f"The current XRP price is ${price:.5f}")
+    if isinstance(price, float):
+        update.message.reply_text(f"The current XRP price is ${price:.5f}")
+    else:
+        update.message.reply_text(price)  # Error message
 
 def lastsignal(update: Update, context: CallbackContext) -> None:
     last_signal = get_last_signal()

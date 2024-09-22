@@ -1,11 +1,26 @@
+# trading_bot.py
 import logging
 from datetime import datetime
 import json
 import os
 import pandas as pd
+import logging
+from logging.handlers import RotatingFileHandler
 from telegram_bot import send_telegram_message
 
-logger = logging.getLogger(__name__)
+# Set up logging with rotating handler
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+handler = RotatingFileHandler('live_trading_signals.log', maxBytes=5*1024*1024, backupCount=5)
+
+# Updated formatter without milliseconds
+formatter = logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'  # Specifies the date format without milliseconds
+)
+
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 class TradingBot:
     def __init__(self, initial_capital=12800.0, state_file='state.json'):
