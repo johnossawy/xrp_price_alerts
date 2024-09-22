@@ -354,8 +354,8 @@ class XRPPriceAlertBot:
 
             self.last_volatility_check_time = current_time
 
-        # Daily summary posting at 11 PM UTC
-        if current_hour == 23 and 0 <= current_minute < 5:
+        # Daily summary posting at 8 PM UTC
+        if current_hour == 20 and 0 <= current_minute < 5:
             if (
                 self.last_daily_summary_time is None
                 or self.last_daily_summary_time.date() < self.current_day
