@@ -60,20 +60,21 @@ def get_last_signal():
         for i in range(len(lines) - 1, -1, -1):
             line = lines[i].strip()
             if buy_pattern.search(line) or sell_pattern.search(line):
+                logging.debug(f"Found signal line: {line}")
+                # Collect this line and the following detail lines
                 signal_lines = [line]
-                # Collect detail lines that follow the signal trigger
                 j = i + 1
                 while j < len(lines):
                     next_line = lines[j].strip()
-                    # If the next line matches any of the detail patterns, include it
                     if any(pattern.search(next_line) for pattern in detail_patterns):
+                        logging.debug(f"Adding detail line: {next_line}")
                         signal_lines.append(next_line)
                         j += 1
                     else:
                         break
-                # Reverse the collected lines to maintain chronological order
-                signal_lines_reversed = list(reversed(signal_lines))
-                return "\n".join(signal_lines_reversed)
+                # Do NOT reverse; the signal line is first
+                return "\n".join(signal_lines)
+        logging.debug("No buy or sell signals found in the log.")
         return "No buy or sell signals found."
     except Exception as e:
         logging.error(f"An error occurred while reading the signals: {e}")
