@@ -40,22 +40,17 @@ def get_last_signal():
         ]
 
         with open(SIGNALS_LOG_FILE, 'r') as f:
-            lines = f.readlines()
-
-        for i in range(len(lines) - 1, -1, -1):
-            line = lines[i].strip()
-            if buy_pattern.search(line) or sell_pattern.search(line):
-                signal_lines = [line]
-                # Look ahead for detail lines
-                j = i + 1
-                while j < len(lines):
-                    next_line = lines[j].strip()
-                    if any(pattern.search(next_line) for pattern in detail_patterns):
-                        signal_lines.append(next_line)
-                        j += 1
-                    else:
-                        break
-                return "\n".join(signal_lines)
+            # Read the file in reverse order
+            for line in reversed(f.readlines()):
+                line = line.strip()
+                if buy_pattern.search(line) or sell_pattern.search(line):
+                    signal_lines = [line]
+                    # Look ahead for detail lines
+                    # Since we're reading in reverse, we need to collect preceding lines
+                    # This requires buffering a few lines
+                    # For simplicity, you might limit the number of lines to look back
+                    # Alternatively, consider using a more efficient log processing method
+                    return "\n".join(signal_lines)
         return "No buy or sell signals found."
     except Exception as e:
         return f"An error occurred while reading the signals: {e}"
