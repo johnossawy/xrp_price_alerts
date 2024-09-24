@@ -205,15 +205,6 @@ class XRPPriceAlertBot:
 
         logging.info(f"Checking time: Hour={current_hour}, Minute={current_minute}")
 
-        # Reset daily high and low at the start of a new day
-        if (
-            self.last_daily_summary_time is not None
-            and self.last_daily_summary_time.date() < self.current_day
-        ):
-            self.daily_high = None
-            self.daily_low = None
-            logging.info("New day detected, reset daily_high and daily_low.")
-
         # Fetch price data
         price_data = fetch_xrp_price()
 
@@ -361,6 +352,7 @@ class XRPPriceAlertBot:
                 or self.last_daily_summary_time.date() < self.current_day
             ):
                 if self.daily_high is not None and self.daily_low is not None:
+                    # Generate and post the daily summary
                     summary_text = generate_daily_summary_message(
                         self.daily_high, self.daily_low
                     )
@@ -372,14 +364,16 @@ class XRPPriceAlertBot:
                             f"Error posting daily summary tweet: {type(e).__name__} - {e}"
                         )
 
+                    # Update the last summary time to prevent multiple posts
                     self.last_daily_summary_time = current_time
                     logging.info(
                         f"Updated last_daily_summary_time to: {self.last_daily_summary_time}"
                     )
 
-                    # Reset daily high and low
+                    # Reset daily high and low for the next day
                     self.daily_high = None
                     self.daily_low = None
+                    logging.info("Reset daily_high and daily_low after posting daily summary.")
                 else:
                     logging.warning(
                         "Daily high and low are None, cannot post daily summary."
