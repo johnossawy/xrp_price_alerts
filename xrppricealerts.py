@@ -6,6 +6,18 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
+from logging.handlers import RotatingFileHandler
+
+# Configure logging with RotatingFileHandler
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Avoid adding multiple handlers if the logger already has handlers
+if not logger.handlers:
+    handler = RotatingFileHandler('xrp_bot.log', maxBytes=5*1024*1024, backupCount=5)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 from app.fetcher import fetch_xrp_price
 from app.twitter import (
@@ -27,14 +39,6 @@ from config import (
     CONSUMER_SECRET,
     RAPIDAPI_KEY,
 )
-
-# Configure logging
-logging.basicConfig(
-    filename='xrp_bot.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-)
-
 
 class XRPPriceAlertBot:
     """Class to handle XRP price alerts and Twitter interactions."""
@@ -85,14 +89,14 @@ class XRPPriceAlertBot:
                 with open(self.LAST_PRICE_FILE, 'r') as file:
                     data = json.load(file)
                     last_price = data.get('last_rounded_price')
-                    logging.info(f"Loaded last_rounded_price: {last_price}")
+                    logger.info(f"Loaded last_rounded_price: {last_price}")
                     return last_price
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"Error loading last_rounded_price: {type(e).__name__} - {e}"
                 )
                 return None
-        logging.warning("last_rounded_price.json does not exist, returning None")
+        logger.warning("last_rounded_price.json does not exist, returning None")
         return None
 
     def save_last_rounded_price(self, price_value):
