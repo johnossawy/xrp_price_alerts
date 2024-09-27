@@ -190,23 +190,30 @@ class TradingBot:
                     minutes, seconds = divmod(remainder, 60)
                     time_held_formatted = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
 
-                    message = (
-                        f"🚨 *Sell Signal Triggered:*\n"
-                        f"Sold at ${price:.5f} on {formatted_timestamp}\n"
-                        f"Profit/Loss = ${profit_loss:.2f}, Time Held = {time_held_formatted}\n"
-                        f"Updated Capital: ${self.capital:.2f}"
-                    )
-                    logger.info(message)
-                    send_telegram_message(message)
+                    # Determine if profit or loss
+                if profit_loss >= 0:
+                    profit_loss_message = f"💰 Profit: ${profit_loss:.2f} (+{price_change * 100:.2f}%)"
+                else:
+                    profit_loss_message = f"🔻 Loss: ${-profit_loss:.2f} ({price_change * 100:.2f}%)"
 
-                    # Reset position-related variables
-                    self.position = None
-                    self.entry_price = None
-                    self.trailing_stop_price = None
-                    self.highest_price = None
-                    self.entry_time = None
+                message = (
+                    f"🚨 *Sell Signal Triggered:*\n"
+                    f"Sold at ${price:.5f} on {formatted_timestamp}\n"
+                    f"{profit_loss_message}\n"
+                    f"Time Held: {time_held_formatted}\n"
+                    f"Updated Capital: ${self.capital:.2f}"
+                )
+                logger.info(message)
+                send_telegram_message(message)
 
-                    self.save_state()  # Save state after processing
+                # Reset position-related variables
+                self.position = None
+                self.entry_price = None
+                self.trailing_stop_price = None
+                self.highest_price = None
+                self.entry_time = None
+
+                self.save_state()  # Save state after processing
 
         except Exception as e:
             logger.error(f"An error occurred while processing data: {e}")
