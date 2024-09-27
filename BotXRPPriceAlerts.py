@@ -48,7 +48,8 @@ def get_last_signal():
         detail_patterns = [
             re.compile(r'Bought at:.*'),
             re.compile(r'Sold at.*'),
-            re.compile(r'Profit/Loss.*'),
+            re.compile(r'💰 Profit:.*'),
+            re.compile(r'🔻 Loss:.*'),
             re.compile(r'Updated Capital.*'),
             re.compile(r'Time Held.*')
         ]
