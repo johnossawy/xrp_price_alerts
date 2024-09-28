@@ -390,7 +390,6 @@ class XRPPriceAlertBot:
         # Sleep for 1 minute before next iteration
         time.sleep(60)
 
-
 if __name__ == "__main__":
     bot = XRPPriceAlertBot()
     bot.run()

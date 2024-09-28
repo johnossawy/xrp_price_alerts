@@ -3,21 +3,26 @@
 import psycopg2
 import psycopg2.extras
 import logging
+import config  # Import your config.py file
 
 class DatabaseHandler:
-    def __init__(self, db_config):
-        self.db_config = db_config
+    def __init__(self):
+        self.host = config.DB_HOST
+        self.port = config.DB_PORT or '5432'
+        self.database = config.DB_NAME
+        self.user = config.DB_USER
+        self.password = config.DB_PASSWORD
         self.conn = None
 
     def connect(self):
         if self.conn is None or self.conn.closed != 0:
             try:
                 self.conn = psycopg2.connect(
-                    host=self.db_config['host'],
-                    port=self.db_config['port'],
-                    database=self.db_config['database'],
-                    user=self.db_config['user'],
-                    password=self.db_config['password']
+                    host=self.host,
+                    port=self.port,
+                    database=self.database,
+                    user=self.user,
+                    password=self.password
                 )
                 logging.info("Connected to the PostgreSQL database.")
             except psycopg2.Error as e:
@@ -29,16 +34,23 @@ class DatabaseHandler:
             self.conn.close()
             logging.info("Database connection closed.")
 
-    def execute_query(self, query, params=None):
+    def execute_query(self, query, params=None, fetch=False):
         self.connect()
         if self.conn is None:
             return None
         try:
             with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
                 cursor.execute(query, params)
-                self.conn.commit()
-                return cursor
+                if fetch:
+                    results = cursor.fetchall()
+                    return results
+                else:
+                    self.conn.commit()
+                    return cursor
         except psycopg2.Error as e:
             logging.error(f"Database query error: {e}")
             self.conn.rollback()
             return None
+
+    def __del__(self):
+        self.close()
