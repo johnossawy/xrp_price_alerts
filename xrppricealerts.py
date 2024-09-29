@@ -1,8 +1,6 @@
-# xrppricealerts.py
-
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta
 from logging.handlers import RotatingFileHandler
 
 from app.fetcher import fetch_xrp_price
@@ -25,7 +23,7 @@ from config import (
     CONSUMER_SECRET,
     RAPIDAPI_KEY,
 )
-from database_handler import DatabaseHandler  # Import your updated DatabaseHandler
+from database_handler import DatabaseHandler
 from app.xrp_messaging import cleanup_old_charts  # Import the cleanup function
 
 # Configure logging with RotatingFileHandler
@@ -99,10 +97,10 @@ class XRPPriceAlertBot:
             else:
                 logger.warning("No last_rounded_price found in DB for XRP, starting fresh.")
 
-            # Load last summary time for 3-hour summary
+            # Load last summary time for 3-hour summary from `twitter_bot_activity`
             query_summary = """
-                SELECT timestamp FROM trade_signals
-                WHERE signal_type = '3_hour_summary'
+                SELECT timestamp FROM twitter_bot_activity
+                WHERE activity_type = '3_hour_summary'
                 ORDER BY timestamp DESC LIMIT 1;
             """
             result = self.db_handler.fetch_one(query_summary)
@@ -149,6 +147,35 @@ class XRPPriceAlertBot:
 
         except Exception as e:
             logger.error(f"Error saving price data to DB: {type(e).__name__} - {e}")
+
+    def save_bot_activity_to_db(self, activity_type, price, summary_text=None):
+        """
+        Save non-trading bot activities to the twitter_bot_activity table.
+
+        Args:
+            activity_type (str): Type of activity ('hourly_update', '3_hour_summary', 'daily_summary').
+            price (float): The XRP price at the time of the activity.
+            summary_text (str, optional): The content of the summary/update.
+        """
+        try:
+            insert_query = """
+                INSERT INTO twitter_bot_activity (timestamp, activity_type, price, summary_text)
+                VALUES (%(timestamp)s, %(activity_type)s, %(price)s, %(summary_text)s);
+            """
+            params = {
+                'timestamp': datetime.now(timezone.utc),
+                'activity_type': activity_type,
+                'price': price,
+                'summary_text': summary_text
+            }
+            success = self.db_handler.execute(insert_query, params)
+            if success:
+                logger.info(f"{activity_type} saved to twitter_bot_activity table.")
+            else:
+                logger.error(f"Failed to save {activity_type} to twitter_bot_activity table.")
+
+        except Exception as e:
+            logger.error(f"Error saving {activity_type} to twitter_bot_activity table: {type(e).__name__} - {e}")
 
     def save_trade_signal_to_db(
         self, signal_type, price, profit_loss=None, percent_change=None, time_held=None, updated_capital=None
@@ -258,12 +285,10 @@ class XRPPriceAlertBot:
                     post_tweet(self.client, tweet_text)
                     logger.info(f"Hourly tweet posted: {tweet_text}")
                     self.last_tweet_hour = current_hour
-                    # Save trade signal to DB
-                    self.save_trade_signal_to_db(
-                        signal_type='hourly_update',
-                        price=rounded_price,
-                        percent_change=percent_change
-                    )
+                    
+                    # Save hourly update to the new twitter_bot_activity table
+                    self.save_bot_activity_to_db('hourly_update', rounded_price)
+
                 except Exception as e:
                     logger.error(f"Error posting tweet: {type(e).__name__} - {e}")
 
@@ -273,9 +298,6 @@ class XRPPriceAlertBot:
                 logger.warning("last_rounded_price is None, skipping hourly tweet.")
 
         # Generate and post 3-hour summary tweet with chart
-        logger.info(
-            f"Checking 3-hour summary condition: Current Hour={current_hour}, Minute={current_minute}, Last Summary Time={self.last_summary_time}"
-        )
         if (
             (current_hour, 0) in self.SUMMARY_TIMES
             and (self.last_summary_time is None or self.last_summary_time.hour != current_hour)
@@ -287,25 +309,16 @@ class XRPPriceAlertBot:
                         self.db_handler, full_price, RAPIDAPI_KEY
                     )
                     if summary_text and chart_filename:
-                        try:
-                            media_id = upload_media(self.api, chart_filename)
-                            post_tweet(self.client, summary_text, media_id)
-                            logger.info(
-                                f"3-hour summary tweet with chart posted: {summary_text}"
-                            )
-                            self.last_summary_time = current_time
-                            # Save trade signal to DB
-                            self.save_trade_signal_to_db(
-                                signal_type='3_hour_summary',
-                                price=rounded_price
-                            )
-                            logger.info(
-                                f"Updated last_summary_time to: {self.last_summary_time}"
-                            )
-                        except Exception as e:
-                            logger.error(
-                                f"Error posting 3-hour summary tweet with chart: {type(e).__name__} - {e}"
-                            )
+                        media_id = upload_media(self.api, chart_filename)
+                        post_tweet(self.client, summary_text, media_id)
+                        logger.info(
+                            f"3-hour summary tweet with chart posted: {summary_text}"
+                        )
+                        self.last_summary_time = current_time
+                        
+                        # Save 3-hour summary to the new twitter_bot_activity table
+                        self.save_bot_activity_to_db('3_hour_summary', rounded_price, summary_text=summary_text)
+
                     else:
                         logger.error(
                             "3-hour summary generation failed: No summary text or chart filename generated."
@@ -314,10 +327,6 @@ class XRPPriceAlertBot:
                     logger.error(
                         f"Error during 3-hour summary generation: {type(e).__name__} - {e}"
                     )
-            else:
-                logger.info("Not within the 5-minute grace period for 3-hour summary.")
-        else:
-            logger.info("3-hour summary condition not met.")
 
         # Volatility check logic with 15-minute interval
         if self.last_volatility_check_time is None or (
@@ -339,12 +348,6 @@ class XRPPriceAlertBot:
                     try:
                         post_tweet(self.client, tweet_text)
                         logger.info(f"Volatility alert tweet posted: {tweet_text}")
-                        # Save trade signal to DB
-                        self.save_trade_signal_to_db(
-                            signal_type='volatility_alert',
-                            price=rounded_price,
-                            percent_change=percent_change
-                        )
                     except Exception as e:
                         logger.error(
                             f"Error posting volatility alert tweet: {type(e).__name__} - {e}"
@@ -369,14 +372,10 @@ class XRPPriceAlertBot:
                     try:
                         post_tweet(self.client, summary_text)
                         logger.info(f"Daily summary tweet posted: {summary_text}")
-                        # Save trade signal to DB
-                        percent_change_daily = get_percent_change(self.daily_low, self.daily_high)
-                        self.save_trade_signal_to_db(
-                            signal_type='daily_summary',
-                            price=rounded_price,
-                            profit_loss=None,
-                            percent_change=percent_change_daily
-                        )
+                        
+                        # Save daily summary to the new twitter_bot_activity table
+                        self.save_bot_activity_to_db('daily_summary', rounded_price, summary_text=summary_text)
+
                     except Exception as e:
                         logger.error(
                             f"Error posting daily summary tweet: {type(e).__name__} - {e}"
