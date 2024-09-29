@@ -1,20 +1,14 @@
-# app/xrp_messaging.py
-
 import base64
 import logging
 import os
 import glob
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from io import BytesIO
 
-import matplotlib.pyplot as plt
-import mplfinance as mpf
-import pandas as pd
 from PIL import Image  # Ensure Pillow is installed
 import requests
 
-# Assuming 'log_info' from 'app.xrp_logger' is a wrapper around the logger
 from app.xrp_logger import log_info
 
 # Constants
@@ -41,7 +35,7 @@ def generate_message(last_price, current_price, is_volatility_alert=False):
     Returns:
         str: The generated tweet message.
     """
-    timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     percent_change = get_percent_change(last_price, current_price)
 
     log_info(f"Generating message: last_price={last_price}, current_price={current_price}, percent_change={percent_change:.2f}%")
@@ -77,7 +71,7 @@ def generate_daily_summary_message(daily_high, daily_low):
         str or None: The generated daily summary message or None if data is insufficient.
     """
     if daily_high is not None and daily_low is not None:
-        timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         return (
             f"📊 Daily Recap: Today’s $XRP traded between a low of ${daily_low:.5f} and a high of ${daily_high:.5f}.\n"
             f"What's next for XRP? Stay tuned! 📈💥\n"
@@ -101,13 +95,12 @@ def generate_3_hour_summary(db_handler, current_price, rapidapi_key):
     """
     try:
         # Calculate the time 3 hours ago
-        end_time = datetime.now(timezone.utc)
+        end_time = datetime.now()
         start_time = end_time - timedelta(hours=3)
 
-        # Query the database for XRP price data in the last 3 hours (OHLC data)
+        # Query the database for XRP price data in the last 3 hours
         query = """
-            SELECT timestamp, open_price, high_price, low_price, last_price, volume
-            FROM crypto_prices
+            SELECT timestamp, last_price FROM crypto_prices
             WHERE symbol = 'XRP' AND timestamp >= %(start_time)s
             ORDER BY timestamp ASC;
         """
@@ -118,23 +111,14 @@ def generate_3_hour_summary(db_handler, current_price, rapidapi_key):
             logging.warning("No XRP data available for the last 3 hours.")
             return None, None
 
-        # Prepare the data for chart generation
+        # Prepare data for chart generation
         timestamps = [row['timestamp'] for row in data]
-        prices = [
-            {
-                'open_price': float(row['open_price']),
-                'high_price': float(row['high_price']),
-                'low_price': float(row['low_price']),
-                'last_price': float(row['last_price']),
-                'volume': float(row['volume']),
-            }
-            for row in data
-        ]
+        prices = [float(row['last_price']) for row in data]
 
         # Determine support and resistance levels
-        support = min(row['low_price'] for row in prices)
-        resistance = max(row['high_price'] for row in prices)
-        three_hours_ago_price = prices[0]['last_price']
+        support = min(prices)
+        resistance = max(prices)
+        three_hours_ago_price = prices[0]
 
         percent_change = get_percent_change(three_hours_ago_price, current_price)
 
@@ -148,7 +132,7 @@ def generate_3_hour_summary(db_handler, current_price, rapidapi_key):
         )
 
         # Generate the chart
-        chart_filename = create_xrp_chart(timestamps, prices)
+        chart_filename = generate_xrp_chart(rapidapi_key)
 
         return summary_text, chart_filename
 
@@ -157,59 +141,9 @@ def generate_3_hour_summary(db_handler, current_price, rapidapi_key):
         return None, None
 
 
-def create_xrp_chart(timestamps, prices):
+def generate_xrp_chart(rapidapi_key):
     """
-    Generate and save the XRP candlestick chart over the last 3 hours.
-
-    Args:
-        timestamps (list of datetime): The timestamps of the price data.
-        prices (list of dict): The corresponding OHLC data (Open, High, Low, Close) of XRP.
-
-    Returns:
-        str or None: The filename of the saved chart or None if failed.
-    """
-    try:
-        # Convert the price data to a DataFrame suitable for mplfinance
-        data = pd.DataFrame({
-            'Timestamp': timestamps,
-            'Open': [row['open_price'] for row in prices],
-            'High': [row['high_price'] for row in prices],
-            'Low': [row['low_price'] for row in prices],
-            'Close': [row['last_price'] for row in prices],
-            'Volume': [row['volume'] for row in prices],
-        }).set_index('Timestamp')
-
-        # Customizing candle colors
-        custom_candle_colors = mpf.make_marketcolors(
-            up='green', down='red', wick={'up': 'green', 'down': 'red'}, 
-            edge={'up': 'green', 'down': 'red'}, volume={'up': 'green', 'down': 'red'}
-        )
-
-        # Dark mode configuration with custom candle colors
-        mpf_style = mpf.make_mpf_style(base_mpf_style='nightclouds', marketcolors=custom_candle_colors)
-
-        # Plotting the candlestick chart
-        fig, axlist = mpf.plot(data, type='candle', style=mpf_style, volume=True, 
-                               title='XRP Price Over Last 3 Hours', ylabel='Price (USD)', 
-                               ylabel_lower='Volume', figsize=(10, 5), returnfig=True)
-
-        # Save the chart to a file
-        timestamp_str = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-        chart_filename = f"xrp_price_chart_{timestamp_str}.png"
-        fig.savefig(chart_filename)
-        plt.close(fig)
-
-        logging.info(f"Price chart saved as '{chart_filename}'.")
-        return chart_filename
-
-    except Exception as e:
-        logging.error(f"Error creating price chart: {type(e).__name__} - {e}")
-        return None
-
-
-def generate_xrp_chart_external(rapidapi_key):
-    """
-    Generate and save the XRP chart using an external API (if preferred).
+    Generate and save the XRP candlestick chart using the external API.
 
     Args:
         rapidapi_key (str): The RapidAPI key for external API calls.
@@ -222,7 +156,7 @@ def generate_xrp_chart_external(rapidapi_key):
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
         'x-rapidapi-host': 'candlestick-chart.p.rapidapi.com',
-        'x-rapidapi-key': rapidapi_key  # Use the key passed as an argument
+        'x-rapidapi-key': rapidapi_key
     }
 
     try:
@@ -235,8 +169,7 @@ def generate_xrp_chart_external(rapidapi_key):
             if base64_image:
                 image_data = base64.b64decode(base64_image)
                 image = Image.open(BytesIO(image_data))
-                timestamp_str = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-                chart_filename = f"candlestick_chart_{timestamp_str}.png"
+                chart_filename = f"xrp_candlestick_chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
                 image.save(chart_filename)
                 logging.info(f"Chart saved as '{chart_filename}'.")
                 return chart_filename
@@ -262,7 +195,7 @@ def cleanup_old_charts(directory='.', days=7):
     try:
         now = time.time()
         cutoff = now - (days * 86400)  # 86400 seconds in a day
-        pattern = os.path.join(directory, 'xrp_price_chart_*.png')
+        pattern = os.path.join(directory, 'xrp_candlestick_chart_*.png')
         files = glob.glob(pattern)
 
         deleted_files = []
