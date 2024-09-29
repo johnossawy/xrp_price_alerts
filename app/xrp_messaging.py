@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 import matplotlib.pyplot as plt
+import mplfinance as mpf
+import pandas as pd
 from PIL import Image  # Ensure Pillow is installed
 import requests
 
@@ -102,9 +104,10 @@ def generate_3_hour_summary(db_handler, current_price, rapidapi_key):
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=3)
 
-        # Query the database for XRP price data in the last 3 hours
+        # Query the database for XRP price data in the last 3 hours (OHLC data)
         query = """
-            SELECT timestamp, last_price FROM crypto_prices
+            SELECT timestamp, open_price, high_price, low_price, last_price, volume
+            FROM crypto_prices
             WHERE symbol = 'XRP' AND timestamp >= %(start_time)s
             ORDER BY timestamp ASC;
         """
@@ -115,14 +118,23 @@ def generate_3_hour_summary(db_handler, current_price, rapidapi_key):
             logging.warning("No XRP data available for the last 3 hours.")
             return None, None
 
-        # Prepare data for chart generation
+        # Prepare the data for chart generation
         timestamps = [row['timestamp'] for row in data]
-        prices = [float(row['last_price']) for row in data]
+        prices = [
+            {
+                'open_price': float(row['open_price']),
+                'high_price': float(row['high_price']),
+                'low_price': float(row['low_price']),
+                'last_price': float(row['last_price']),
+                'volume': float(row['volume']),
+            }
+            for row in data
+        ]
 
         # Determine support and resistance levels
-        support = min(prices)
-        resistance = max(prices)
-        three_hours_ago_price = prices[0]
+        support = min(row['low_price'] for row in prices)
+        resistance = max(row['high_price'] for row in prices)
+        three_hours_ago_price = prices[0]['last_price']
 
         percent_change = get_percent_change(three_hours_ago_price, current_price)
 
@@ -147,38 +159,45 @@ def generate_3_hour_summary(db_handler, current_price, rapidapi_key):
 
 def create_xrp_chart(timestamps, prices):
     """
-    Generate and save the XRP chart over the last 3 hours.
+    Generate and save the XRP candlestick chart over the last 3 hours.
 
     Args:
         timestamps (list of datetime): The timestamps of the price data.
-        prices (list of float): The corresponding prices of XRP.
+        prices (list of dict): The corresponding OHLC data (Open, High, Low, Close) of XRP.
 
     Returns:
         str or None: The filename of the saved chart or None if failed.
     """
     try:
-        plt.figure(figsize=(10, 5))
-        plt.plot(timestamps, prices, marker='o', linestyle='-', color='blue')
-        plt.title('XRP Price Over Last 3 Hours')
-        plt.xlabel('Time')
-        plt.ylabel('Price (USD)')
-        plt.grid(True)
-        plt.tight_layout()
+        # Convert the price data to a DataFrame suitable for mplfinance
+        data = pd.DataFrame({
+            'Timestamp': timestamps,
+            'Open': [row['open_price'] for row in prices],
+            'High': [row['high_price'] for row in prices],
+            'Low': [row['low_price'] for row in prices],
+            'Close': [row['last_price'] for row in prices],
+            'Volume': [row['volume'] for row in prices],
+        }).set_index('Timestamp')
 
-        # Format x-axis for better readability
-        plt.gcf().autofmt_xdate()
+        # Customizing candle colors
+        custom_candle_colors = mpf.make_marketcolors(
+            up='green', down='red', wick={'up': 'green', 'down': 'red'}, 
+            edge={'up': 'green', 'down': 'red'}, volume={'up': 'green', 'down': 'red'}
+        )
 
-        # Save the chart to a BytesIO buffer
-        buffer = BytesIO()
-        plt.savefig(buffer, format='png')
-        plt.close()
-        buffer.seek(0)
+        # Dark mode configuration with custom candle colors
+        mpf_style = mpf.make_mpf_style(base_mpf_style='nightclouds', marketcolors=custom_candle_colors)
 
-        # Save the image to disk
+        # Plotting the candlestick chart
+        fig, axlist = mpf.plot(data, type='candle', style=mpf_style, volume=True, 
+                               title='XRP Price Over Last 3 Hours', ylabel='Price (USD)', 
+                               ylabel_lower='Volume', figsize=(10, 5), returnfig=True)
+
+        # Save the chart to a file
         timestamp_str = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         chart_filename = f"xrp_price_chart_{timestamp_str}.png"
-        with open(chart_filename, 'wb') as f:
-            f.write(buffer.read())
+        fig.savefig(chart_filename)
+        plt.close(fig)
 
         logging.info(f"Price chart saved as '{chart_filename}'.")
         return chart_filename
