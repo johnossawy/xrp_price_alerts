@@ -1,21 +1,27 @@
 # app/xrp_messaging.py
 
+import base64
 import logging
+import os
+import glob
+import time
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 
 import matplotlib.pyplot as plt
-from io import BytesIO
+from PIL import Image  # Ensure Pillow is installed
+import requests
 
 # Assuming 'log_info' from 'app.xrp_logger' is a wrapper around the logger
 from app.xrp_logger import log_info
 
-
+# Constants
 ALL_TIME_HIGH_PRICE = 3.65  # Update this value as per your requirements
 
 
 def get_percent_change(old_price, new_price):
     """Calculate the percentage change between two prices."""
-    if old_price != 0:
+    if old_price != 0 and old_price is not None:
         return ((new_price - old_price) / old_price) * 100
     else:
         return 0
@@ -192,11 +198,6 @@ def generate_xrp_chart_external(rapidapi_key):
     Returns:
         str or None: The filename of the saved chart or None if failed.
     """
-    import requests
-    import base64
-    from PIL import Image
-    from io import BytesIO
-
     url = 'https://candlestick-chart.p.rapidapi.com/binance'
     querystring = {'symbol': 'XRPUSDT', 'interval': '15m', 'limit': '16'}
     headers = {
@@ -215,7 +216,8 @@ def generate_xrp_chart_external(rapidapi_key):
             if base64_image:
                 image_data = base64.b64decode(base64_image)
                 image = Image.open(BytesIO(image_data))
-                chart_filename = f"candlestick_chart_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.png"
+                timestamp_str = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+                chart_filename = f"candlestick_chart_{timestamp_str}.png"
                 image.save(chart_filename)
                 logging.info(f"Chart saved as '{chart_filename}'.")
                 return chart_filename
@@ -228,3 +230,35 @@ def generate_xrp_chart_external(rapidapi_key):
         logging.error(f"An error occurred while generating the chart: {type(e).__name__} - {e}")
 
     return None
+
+
+def cleanup_old_charts(directory='.', days=7):
+    """
+    Delete chart files older than a specified number of days.
+
+    Args:
+        directory (str): The directory to search for chart files.
+        days (int): The age threshold in days. Files older than this will be deleted.
+    """
+    try:
+        now = time.time()
+        cutoff = now - (days * 86400)  # 86400 seconds in a day
+        pattern = os.path.join(directory, 'xrp_price_chart_*.png')
+        files = glob.glob(pattern)
+
+        deleted_files = []
+
+        for file_path in files:
+            if os.path.isfile(file_path):
+                file_mtime = os.path.getmtime(file_path)
+                if file_mtime < cutoff:
+                    os.remove(file_path)
+                    deleted_files.append(file_path)
+
+        if deleted_files:
+            log_info(f"Deleted old chart files: {deleted_files}")
+        else:
+            log_info("No old chart files to delete.")
+
+    except Exception as e:
+        logging.error(f"Error during cleanup of old charts: {type(e).__name__} - {e}")
