@@ -14,6 +14,9 @@ from database_handler import DatabaseHandler  # Import your updated DatabaseHand
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Disable propagation to avoid root logger handling stdout
+logger.propagate = False
+
 # Remove any default handlers from the root logger to prevent logging to console
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
