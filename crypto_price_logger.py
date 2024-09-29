@@ -10,10 +10,6 @@ import requests
 
 from database_handler import DatabaseHandler  # Import your updated DatabaseHandler
 
-# Optional: Verify the logging module source
-# import logging
-# print("Logging module source:", logging.__file__)
-
 # Configure logging with RotatingFileHandler
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -42,8 +38,8 @@ BASE_SLEEP_TIME = 2  # in seconds
 
 # Field names corresponding to the database schema
 FIELDNAMES = [
-    'timestamp', 'symbol', 'last', 'high', 'low', 'vwap', 'volume',
-    'bid', 'ask', 'open', 'percent_change_24h', 'percent_change'
+    'timestamp', 'symbol', 'last_price', 'high_price', 'low_price', 'vwap', 'volume',
+    'bid', 'ask', 'open_price', 'percent_change_24h', 'percent_change'
 ]
 
 
@@ -80,15 +76,15 @@ def get_last_price(db_handler, symbol):
     """
     try:
         query = """
-            SELECT last FROM crypto_prices
+            SELECT last_price FROM crypto_prices
             WHERE symbol = %(symbol)s
             ORDER BY timestamp DESC
             LIMIT 1;
         """
         params = {'symbol': symbol}
         result = db_handler.fetch_one(query, params)
-        if result and result.get('last') is not None:
-            return float(result['last'])
+        if result and result.get('last_price') is not None:
+            return float(result['last_price'])
         else:
             logger.warning(f"No previous price found in DB for {symbol}.")
             return None
@@ -112,24 +108,24 @@ def save_price_to_db(db_handler, symbol, price_data):
     try:
         insert_query = """
             INSERT INTO crypto_prices (
-                timestamp, symbol, last, high, low, vwap, volume,
-                bid, ask, open, percent_change_24h, percent_change
+                timestamp, symbol, last_price, high_price, low_price, vwap, volume,
+                bid, ask, open_price, percent_change_24h, percent_change
             ) VALUES (
-                %(timestamp)s, %(symbol)s, %(last)s, %(high)s, %(low)s, %(vwap)s, %(volume)s,
-                %(bid)s, %(ask)s, %(open)s, %(percent_change_24h)s, %(percent_change)s
+                %(timestamp)s, %(symbol)s, %(last_price)s, %(high_price)s, %(low_price)s, %(vwap)s, %(volume)s,
+                %(bid)s, %(ask)s, %(open_price)s, %(percent_change_24h)s, %(percent_change)s
             );
         """
         params = {
             'timestamp': datetime.now(timezone.utc),
             'symbol': symbol,
-            'last': float(price_data.get('last', 0)),
-            'high': float(price_data.get('high', 0)),
-            'low': float(price_data.get('low', 0)),
+            'last_price': float(price_data.get('last', 0)),
+            'high_price': float(price_data.get('high', 0)),
+            'low_price': float(price_data.get('low', 0)),
             'vwap': float(price_data.get('vwap', 0)),
             'volume': float(price_data.get('volume', 0)),
             'bid': float(price_data.get('bid', 0)),
             'ask': float(price_data.get('ask', 0)),
-            'open': float(price_data.get('open', 0)),
+            'open_price': float(price_data.get('open', 0)),
             'percent_change_24h': float(price_data.get('percent_change', 0)) if price_data.get('percent_change') else None,
             'percent_change': price_data.get('percent_change_calculated'),
         }
