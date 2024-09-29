@@ -28,14 +28,15 @@ def get_xrp_price() -> Union[float, str]:
     """
     try:
         query = """
-            SELECT last FROM crypto_prices
-            WHERE symbol = 'XRP'
+            SELECT last_price FROM crypto_prices
+            WHERE symbol = %(symbol)s
             ORDER BY timestamp DESC
             LIMIT 1;
         """
-        result = db_handler.fetch_one(query)
-        if result and result.get('last') is not None:
-            price = float(result['last'])
+        params = {'symbol': 'XRP'}
+        result = db_handler.fetch_one(query, params)
+        if result and result.get('last_price') is not None:
+            price = float(result['last_price'])
             logging.info(f"Retrieved XRP price: ${price:.5f}")
             return price
         else:
@@ -79,11 +80,16 @@ def get_last_signal() -> str:
                     f"#Ripple #XRP #XRPPriceAlerts"
                 )
             elif signal_type.lower() == 'sell':
+                # Determine if it's a profit or loss
+                if profit_loss > 0:
+                    profit_loss_msg = f"💰 Profit: ${profit_loss:.2f}"
+                else:
+                    profit_loss_msg = f"🔻 Loss: ${-profit_loss:.2f}"
+                
                 message = (
                     f"🚨 *Sell Signal Triggered:*\n"
                     f"Sold at: ${price:.5f}\n"
-                    f"💰 Profit: ${profit_loss:.2f}\n"
-                    f"🔻 Loss: ${-profit_loss:.2f}\n"
+                    f"{profit_loss_msg}\n"
                     f"Updated Capital: ${updated_capital:.2f}\n"
                     f"Time Held: {time_held}\n"
                     f"Time: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n"
@@ -124,7 +130,7 @@ def lastsignal(update: Update, context: CallbackContext) -> None:
 def main():
     """Start the bot."""
     # Set up the Updater with your bot token
-    updater = Updater(TELEGRAM_BOT_TOKEN)
+    updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
 
     # Add command handlers
