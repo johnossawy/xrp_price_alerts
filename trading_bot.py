@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from database_handler import DatabaseHandler
 from telegram_bot import send_telegram_message
@@ -121,12 +121,15 @@ class TradingBot:
                     logger.info(f"🔄 Trailing Stop Updated: New Stop Price is ${self.trailing_stop_price:.5f} (Highest Price: ${self.highest_price:.5f})")
                     self.save_state()
 
+                # Make datetime.now() timezone-aware to match entry_time from the database
+                now = datetime.now(timezone.utc)  # Makes datetime.now() UTC aware
+
                 if price <= self.trailing_stop_price or price >= self.entry_price * (1 + self.take_profit_threshold) or price <= self.entry_price * (1 + self.stop_loss_threshold):
                     price_change = (price - self.entry_price) / self.entry_price
                     profit_loss = self.capital * price_change
                     self.capital += profit_loss
 
-                    time_held = datetime.now() - self.entry_time
+                    time_held = now - self.entry_time  # This should now work correctly
                     message = f"🚨 *Sell Signal Triggered*\nSold at ${price:.5f}\nProfit/Loss: ${profit_loss:.2f}\nUpdated Capital: ${self.capital:.2f}"
                     logger.info(message)
                     send_telegram_message(message)
