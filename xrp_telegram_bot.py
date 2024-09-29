@@ -57,11 +57,12 @@ def get_last_signal() -> str:
         query = """
             SELECT signal_type, price, profit_loss, percent_change, time_held, updated_capital, timestamp
             FROM trade_signals
-            WHERE signal_type IN ('buy', 'sell')  -- Adjust based on actual signal types
+            WHERE UPPER(signal_type) IN ('BUY', 'SELL', 'SELL_LOSS')  -- Include all relevant signal types
             ORDER BY timestamp DESC
             LIMIT 1;
         """
-        result = db_handler.fetch_one(query)
+        params = {}
+        result = db_handler.fetch_one(query, params)
         if result:
             signal_type = result.get('signal_type', 'Unknown').capitalize()
             price = result.get('price')
@@ -71,15 +72,18 @@ def get_last_signal() -> str:
             updated_capital = result.get('updated_capital')
             timestamp = result.get('timestamp')
             
+            # Normalize signal type for consistent handling
+            normalized_signal = signal_type.upper()
+            
             # Format the message based on signal type and available data
-            if signal_type.lower() == 'buy':
+            if normalized_signal == 'BUY':
                 message = (
                     f"⚠️ *Buy Signal Triggered*\n"
                     f"Bought at: ${price:.5f}\n"
                     f"Time: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n"
                     f"#Ripple #XRP #XRPPriceAlerts"
                 )
-            elif signal_type.lower() == 'sell':
+            elif normalized_signal in ['SELL', 'SELL_LOSS']:
                 # Determine if it's a profit or loss
                 if profit_loss > 0:
                     profit_loss_msg = f"💰 Profit: ${profit_loss:.2f}"
