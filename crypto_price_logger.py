@@ -1,6 +1,7 @@
 # crypto_price_logger.py
 
 import logging
+from logging.handlers import RotatingFileHandler  # Correct import
 import time
 from datetime import datetime, timezone
 import random
@@ -9,16 +10,23 @@ import requests
 
 from database_handler import DatabaseHandler  # Import your updated DatabaseHandler
 
+# Optional: Verify the logging module source
+# import logging
+# print("Logging module source:", logging.__file__)
+
 # Configure logging with RotatingFileHandler
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Avoid adding multiple handlers if the logger already has handlers
 if not logger.handlers:
-    handler = logging.handlers.RotatingFileHandler(
+    handler = RotatingFileHandler(
         'crypto_price_logger.log', maxBytes=5*1024*1024, backupCount=5
     )
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
