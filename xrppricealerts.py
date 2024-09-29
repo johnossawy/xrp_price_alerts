@@ -54,7 +54,7 @@ class XRPPriceAlertBot:
             (12, 0),
             (15, 0),
             (18, 0),
-            (21, 25),
+            (21, 0),
         }  # Hours to post 3-hour summary tweets
 
         # Initialize tracking variables
