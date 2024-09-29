@@ -1,23 +1,9 @@
 # xrppricealerts.py
 
-import csv
-import json
 import logging
-import os
 import time
 from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
-
-# Configure logging with RotatingFileHandler
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-# Avoid adding multiple handlers if the logger already has handlers
-if not logger.handlers:
-    handler = RotatingFileHandler('xrp_bot.log', maxBytes=5*1024*1024, backupCount=5)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
 
 from app.fetcher import fetch_xrp_price
 from app.twitter import (
@@ -39,6 +25,20 @@ from config import (
     CONSUMER_SECRET,
     RAPIDAPI_KEY,
 )
+from database_handler import DatabaseHandler  # Import your updated DatabaseHandler
+from app.xrp_messaging import cleanup_old_charts  # Import the cleanup function
+
+# Configure logging with RotatingFileHandler
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Avoid adding multiple handlers if the logger already has handlers
+if not logger.handlers:
+    handler = RotatingFileHandler('xrp_bot.log', maxBytes=5*1024*1024, backupCount=5)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
 
 class XRPPriceAlertBot:
     """Class to handle XRP price alerts and Twitter interactions."""
@@ -57,18 +57,13 @@ class XRPPriceAlertBot:
             (21, 0),
         }  # Hours to post 3-hour summary tweets
 
-        # Define the CSV file and JSON files for data storage
-        self.CSV_FILE = 'xrp_price_data.csv'
-        self.LAST_SUMMARY_FILE = 'last_summary_time.json'
-        self.LAST_PRICE_FILE = 'last_rounded_price.json'
-
         # Initialize tracking variables
         self.daily_high = None
         self.daily_low = None
         self.current_day = datetime.now(timezone.utc).date()
         self.last_volatility_check_time = None
-        self.last_rounded_price = self.load_last_rounded_price()
-        self.last_summary_time = self.load_last_summary_time()
+        self.last_rounded_price = None
+        self.last_summary_time = None
         self.last_daily_summary_time = None
         self.last_full_price = None
         self.last_tweet_hour = None
@@ -82,111 +77,108 @@ class XRPPriceAlertBot:
             CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_TOKEN_SECRET
         )
 
-    def load_last_rounded_price(self):
-        """Load the last rounded price from a JSON file."""
-        if os.path.exists(self.LAST_PRICE_FILE):
-            try:
-                with open(self.LAST_PRICE_FILE, 'r') as file:
-                    data = json.load(file)
-                    last_price = data.get('last_rounded_price')
-                    logger.info(f"Loaded last_rounded_price: {last_price}")
-                    return last_price
-            except Exception as e:
-                logger.error(
-                    f"Error loading last_rounded_price: {type(e).__name__} - {e}"
-                )
-                return None
-        logger.warning("last_rounded_price.json does not exist, returning None")
-        return None
+        # Initialize the DatabaseHandler
+        self.db_handler = DatabaseHandler()
 
-    def save_last_rounded_price(self, price_value):
-        """Save the last rounded price to a JSON file."""
+        # Load state from the database
+        self.load_state_from_db()
+
+    def load_state_from_db(self):
+        """Load the last rounded price and summary time from the database."""
         try:
-            with open(self.LAST_PRICE_FILE, 'w') as file:
-                json.dump({'last_rounded_price': price_value}, file)
-            logging.info(f"Saved last_rounded_price: {price_value}")
+            # Load last rounded price for XRP
+            query_price = """
+                SELECT last_price FROM crypto_prices
+                WHERE symbol = 'XRP'
+                ORDER BY timestamp DESC LIMIT 1;
+            """
+            result = self.db_handler.fetch_one(query_price)
+            if result and result.get('last_price') is not None:
+                self.last_rounded_price = round(float(result['last_price']), 2)
+                logger.info(f"Loaded last_rounded_price from DB: {self.last_rounded_price}")
+            else:
+                logger.warning("No last_rounded_price found in DB for XRP, starting fresh.")
+
+            # Load last summary time for 3-hour summary
+            query_summary = """
+                SELECT timestamp FROM trade_signals
+                WHERE signal_type = '3_hour_summary'
+                ORDER BY timestamp DESC LIMIT 1;
+            """
+            result = self.db_handler.fetch_one(query_summary)
+            if result and result.get('timestamp') is not None:
+                self.last_summary_time = result['timestamp']
+                logger.info(f"Loaded last_summary_time from DB: {self.last_summary_time}")
+            else:
+                logger.warning("No last_summary_time found in DB, starting fresh.")
+
         except Exception as e:
-            logging.error(
-                f"Error saving last_rounded_price: {type(e).__name__} - {e}"
-            )
+            logger.error(f"Error loading state from DB: {type(e).__name__} - {e}")
 
-    def load_last_summary_time(self):
-        """Load the last summary time from a JSON file."""
-        if os.path.exists(self.LAST_SUMMARY_FILE):
-            try:
-                with open(self.LAST_SUMMARY_FILE, 'r') as file:
-                    data = json.load(file)
-                    time_str = data.get('last_summary_time')
-                    if isinstance(time_str, str) and time_str.strip():
-                        return datetime.fromisoformat(time_str)
-                    else:
-                        logging.warning(
-                            "No valid 'last_summary_time' found in the JSON file."
-                        )
-            except json.JSONDecodeError as e:
-                logging.error(
-                    f"Error decoding JSON from {self.LAST_SUMMARY_FILE}: {type(e).__name__} - {e}"
-                )
-            except Exception as e:
-                logging.error(
-                    f"Error loading last_summary_time: {type(e).__name__} - {e}"
-                )
-        else:
-            logging.warning(f"{self.LAST_SUMMARY_FILE} does not exist.")
-        return None
-
-    def save_last_summary_time(self, time_value):
-        """Save the last summary time to a JSON file."""
+    def save_state_to_db(self, price_data):
+        """Save price data to the database."""
         try:
-            with open(self.LAST_SUMMARY_FILE, 'w') as file:
-                json.dump({'last_summary_time': time_value.isoformat()}, file)
-            logging.info(f"Saved last_summary_time: {time_value.isoformat()}")
-        except Exception as e:
-            logging.error(
-                f"Error saving last_summary_time: {type(e).__name__} - {e}"
-            )
+            insert_query = """
+                INSERT INTO crypto_prices (
+                    timestamp, symbol, last_price, open_price, high_price,
+                    low_price, volume, vwap, bid, ask, percent_change_24h, percent_change
+                ) VALUES (
+                    %(timestamp)s, %(symbol)s, %(last_price)s, %(open_price)s, %(high_price)s,
+                    %(low_price)s, %(volume)s, %(vwap)s, %(bid)s, %(ask)s, %(percent_change_24h)s, %(percent_change)s
+                );
+            """
+            params = {
+                'timestamp': datetime.now(timezone.utc),
+                'symbol': 'XRP',
+                'last_price': price_data.get('last'),
+                'open_price': price_data.get('open'),
+                'high_price': price_data.get('high'),
+                'low_price': price_data.get('low'),
+                'volume': price_data.get('volume'),
+                'vwap': price_data.get('vwap'),
+                'bid': price_data.get('bid'),
+                'ask': price_data.get('ask'),
+                'percent_change_24h': price_data.get('percent_change_24'),
+                'percent_change': price_data.get('percent_change'),
+            }
+            success = self.db_handler.execute(insert_query, params)
+            if success:
+                logger.info("Saved price data to DB.")
+            else:
+                logger.error("Failed to save price data to DB.")
 
-    def append_to_csv(self, timestamp, price_data, percent_change=None):
-        """Append price data to a CSV file."""
+        except Exception as e:
+            logger.error(f"Error saving price data to DB: {type(e).__name__} - {e}")
+
+    def save_trade_signal_to_db(
+        self, signal_type, price, profit_loss=None, percent_change=None, time_held=None, updated_capital=None
+    ):
+        """Save trade signal data to the database."""
         try:
-            file_exists = os.path.isfile(self.CSV_FILE)
-            with open(self.CSV_FILE, 'a', newline='') as csvfile:
-                csv_writer = csv.writer(csvfile)
-                if not file_exists or os.path.getsize(self.CSV_FILE) == 0:
-                    csv_writer.writerow(
-                        [
-                            'timestamp',
-                            'last_price',
-                            'open',
-                            'high',
-                            'low',
-                            'volume',
-                            'vwap',
-                            'bid',
-                            'ask',
-                            'percent_change_24',
-                            'percent_change',
-                        ]
-                    )
+            insert_query = """
+                INSERT INTO trade_signals (
+                    timestamp, signal_type, price, profit_loss, percent_change, time_held, updated_capital
+                ) VALUES (
+                    %(timestamp)s, %(signal_type)s, %(price)s, %(profit_loss)s, %(percent_change)s, %(time_held)s, %(updated_capital)s
+                );
+            """
+            params = {
+                'timestamp': datetime.now(timezone.utc),
+                'signal_type': signal_type,
+                'price': price,
+                'profit_loss': profit_loss,
+                'percent_change': percent_change,
+                'time_held': time_held,
+                'updated_capital': updated_capital,
+            }
+            success = self.db_handler.execute(insert_query, params)
+            if success:
+                logger.info(f"Saved trade signal '{signal_type}' to DB.")
+            else:
+                logger.error(f"Failed to save trade signal '{signal_type}' to DB.")
 
-                csv_writer.writerow(
-                    [
-                        timestamp,
-                        price_data.get('last'),
-                        price_data.get('open'),
-                        price_data.get('high'),
-                        price_data.get('low'),
-                        price_data.get('volume'),
-                        price_data.get('vwap'),
-                        price_data.get('bid'),
-                        price_data.get('ask'),
-                        price_data.get('percent_change_24'),
-                        percent_change,
-                    ]
-                )
-            logging.info(f"Appended data to CSV at {timestamp}")
         except Exception as e:
-            logging.error(f"Error appending to CSV: {type(e).__name__} - {e}")
+            logger.error(f"Error saving trade signal to DB: {type(e).__name__} - {e}")
 
     def run(self):
         """Run the main loop of the bot."""
@@ -194,7 +186,7 @@ class XRPPriceAlertBot:
             try:
                 self.main_loop()
             except Exception as e:
-                logging.error(
+                logger.error(
                     f"An error occurred in the main loop: {type(e).__name__} - {e}"
                 )
                 time.sleep(60)
@@ -204,23 +196,22 @@ class XRPPriceAlertBot:
         current_time = datetime.now(timezone.utc)
         current_hour = current_time.hour
         current_minute = current_time.minute
-        timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
         self.current_day = current_time.date()
 
-        logging.info(f"Checking time: Hour={current_hour}, Minute={current_minute}")
+        logger.info(f"Checking time: Hour={current_hour}, Minute={current_minute}")
 
         # Fetch price data
         price_data = fetch_xrp_price()
 
         if not price_data or 'last' not in price_data:
-            logging.warning("Failed to fetch price data.")
+            logger.warning("Failed to fetch price data.")
             time.sleep(60)
             return
 
         try:
             full_price = float(price_data['last'])
         except (ValueError, TypeError) as e:
-            logging.error(f"Error parsing price data: {type(e).__name__} - {e}")
+            logger.error(f"Error parsing price data: {type(e).__name__} - {e}")
             time.sleep(60)
             return
 
@@ -234,17 +225,17 @@ class XRPPriceAlertBot:
 
         # Force save the rounded price on first run if it is None
         if self.last_rounded_price is None:
-            self.save_last_rounded_price(rounded_price)
             self.last_rounded_price = rounded_price
 
         # Calculate percent change for logging purposes
         if self.last_full_price is not None:
             percent_change = get_percent_change(self.last_full_price, full_price)
         else:
-            percent_change = None
+            percent_change = 0.0  # Assuming 0% change if no previous price
 
-        # Log the price data
-        self.append_to_csv(timestamp, price_data, percent_change)
+        # Save price data to the database
+        price_data['percent_change'] = percent_change
+        self.save_state_to_db(price_data)
 
         # Update last_full_price
         self.last_full_price = full_price
@@ -252,32 +243,37 @@ class XRPPriceAlertBot:
         # Hourly tweet logic with 5-minute grace period
         if self.last_tweet_hour != current_hour and current_minute < 5:
             if self.last_rounded_price is not None:
-                logging.info(
+                logger.info(
                     f"Comparing last_rounded_price={self.last_rounded_price} with rounded_price={rounded_price}"
                 )
                 percent_change = get_percent_change(
                     self.last_rounded_price, rounded_price
                 )
-                logging.info(f"Calculated percent_change={percent_change:.2f}%")
+                logger.info(f"Calculated percent_change={percent_change:.2f}%")
 
                 tweet_text = generate_message(
                     self.last_rounded_price, rounded_price
                 )
                 try:
                     post_tweet(self.client, tweet_text)
-                    logging.info(f"Hourly tweet posted: {tweet_text}")
+                    logger.info(f"Hourly tweet posted: {tweet_text}")
                     self.last_tweet_hour = current_hour
+                    # Save trade signal to DB
+                    self.save_trade_signal_to_db(
+                        signal_type='hourly_update',
+                        price=rounded_price,
+                        percent_change=percent_change
+                    )
                 except Exception as e:
-                    logging.error(f"Error posting tweet: {type(e).__name__} - {e}")
+                    logger.error(f"Error posting tweet: {type(e).__name__} - {e}")
 
                 # Save the current rounded price after posting
-                self.save_last_rounded_price(rounded_price)
                 self.last_rounded_price = rounded_price
             else:
-                logging.warning("last_rounded_price is None, skipping hourly tweet.")
+                logger.warning("last_rounded_price is None, skipping hourly tweet.")
 
         # Generate and post 3-hour summary tweet with chart
-        logging.info(
+        logger.info(
             f"Checking 3-hour summary condition: Current Hour={current_hour}, Minute={current_minute}, Last Summary Time={self.last_summary_time}"
         )
         if (
@@ -285,45 +281,49 @@ class XRPPriceAlertBot:
             and (self.last_summary_time is None or self.last_summary_time.hour != current_hour)
         ):
             if current_minute < 5:
-                logging.info("3-hour summary condition met. Attempting to generate and post.")
+                logger.info("3-hour summary condition met. Attempting to generate and post.")
                 try:
                     summary_text, chart_filename = generate_3_hour_summary(
-                        self.CSV_FILE, full_price, RAPIDAPI_KEY
+                        self.db_handler, full_price, RAPIDAPI_KEY
                     )
                     if summary_text and chart_filename:
                         try:
                             media_id = upload_media(self.api, chart_filename)
                             post_tweet(self.client, summary_text, media_id)
-                            logging.info(
+                            logger.info(
                                 f"3-hour summary tweet with chart posted: {summary_text}"
                             )
                             self.last_summary_time = current_time
-                            self.save_last_summary_time(self.last_summary_time)
-                            logging.info(
+                            # Save trade signal to DB
+                            self.save_trade_signal_to_db(
+                                signal_type='3_hour_summary',
+                                price=rounded_price
+                            )
+                            logger.info(
                                 f"Updated last_summary_time to: {self.last_summary_time}"
                             )
                         except Exception as e:
-                            logging.error(
+                            logger.error(
                                 f"Error posting 3-hour summary tweet with chart: {type(e).__name__} - {e}"
                             )
                     else:
-                        logging.error(
+                        logger.error(
                             "3-hour summary generation failed: No summary text or chart filename generated."
                         )
                 except Exception as e:
-                    logging.error(
+                    logger.error(
                         f"Error during 3-hour summary generation: {type(e).__name__} - {e}"
                     )
             else:
-                logging.info("Not within the 5-minute grace period for 3-hour summary.")
+                logger.info("Not within the 5-minute grace period for 3-hour summary.")
         else:
-            logging.info("3-hour summary condition not met.")
+            logger.info("3-hour summary condition not met.")
 
         # Volatility check logic with 15-minute interval
         if self.last_volatility_check_time is None or (
             current_time - self.last_volatility_check_time
         ) >= timedelta(minutes=15):
-            logging.info(
+            logger.info(
                 f"Checking for volatility: last_checked_price={self.last_checked_price}, full_price={full_price}"
             )
             if self.last_checked_price is not None:
@@ -338,9 +338,15 @@ class XRPPriceAlertBot:
                     )
                     try:
                         post_tweet(self.client, tweet_text)
-                        logging.info(f"Volatility alert tweet posted: {tweet_text}")
+                        logger.info(f"Volatility alert tweet posted: {tweet_text}")
+                        # Save trade signal to DB
+                        self.save_trade_signal_to_db(
+                            signal_type='volatility_alert',
+                            price=rounded_price,
+                            percent_change=percent_change
+                        )
                     except Exception as e:
-                        logging.error(
+                        logger.error(
                             f"Error posting volatility alert tweet: {type(e).__name__} - {e}"
                         )
                 self.last_checked_price = rounded_price
@@ -362,33 +368,49 @@ class XRPPriceAlertBot:
                     )
                     try:
                         post_tweet(self.client, summary_text)
-                        logging.info(f"Daily summary tweet posted: {summary_text}")
+                        logger.info(f"Daily summary tweet posted: {summary_text}")
+                        # Save trade signal to DB
+                        percent_change_daily = get_percent_change(self.daily_low, self.daily_high)
+                        self.save_trade_signal_to_db(
+                            signal_type='daily_summary',
+                            price=rounded_price,
+                            profit_loss=None,
+                            percent_change=percent_change_daily
+                        )
                     except Exception as e:
-                        logging.error(
+                        logger.error(
                             f"Error posting daily summary tweet: {type(e).__name__} - {e}"
                         )
 
                     # Update the last summary time to prevent multiple posts
                     self.last_daily_summary_time = current_time
-                    logging.info(
+                    logger.info(
                         f"Updated last_daily_summary_time to: {self.last_daily_summary_time}"
                     )
 
                     # Reset daily high and low for the next day
                     self.daily_high = None
                     self.daily_low = None
-                    logging.info("Reset daily_high and daily_low after posting daily summary.")
+                    logger.info("Reset daily_high and daily_low after posting daily summary.")
                 else:
-                    logging.warning(
+                    logger.warning(
                         "Daily high and low are None, cannot post daily summary."
                     )
             else:
-                logging.info("Daily summary already posted for today.")
+                logger.info("Daily summary already posted for today.")
         else:
-            logging.info("Not time for daily summary yet.")
+            logger.info("Not time for daily summary yet.")
+
+        # Cleanup old charts to conserve disk space
+        cleanup_old_charts()
 
         # Sleep for 1 minute before next iteration
         time.sleep(60)
+
+    def __del__(self):
+        """Ensure the database connection is closed."""
+        self.db_handler.close()
+
 
 if __name__ == "__main__":
     bot = XRPPriceAlertBot()
