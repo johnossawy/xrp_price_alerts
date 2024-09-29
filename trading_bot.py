@@ -1,20 +1,20 @@
 import logging
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
-from database_handler import DatabaseHandler  # Import your DatabaseHandler
+from database_handler import DatabaseHandler
 from telegram_bot import send_telegram_message
+from decimal import Decimal
 
 # Set up logging with rotating handler
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-handler = RotatingFileHandler('live_trading_signals.log', maxBytes=5*1024*1024, backupCount=5)
 
-formatter = logging.Formatter(
-    '%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+# Remove any default handlers if already added to avoid duplicate logs
+if not logger.handlers:
+    handler = RotatingFileHandler('live_trading_signals.log', maxBytes=5*1024*1024, backupCount=5)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 class TradingBot:
     def __init__(self, initial_capital=12800.0):
@@ -50,63 +50,17 @@ class TradingBot:
         """
         row = self.db_handler.fetch_one(query)
         if row:
-            self.capital = row['capital']
+            self.capital = float(row['capital'])  # Ensure values are converted to float
             self.position = row['position']
-            self.entry_price = row['entry_price']
-            self.trailing_stop_price = row['trailing_stop_price']
-            self.highest_price = row['highest_price']
+            self.entry_price = float(row['entry_price']) if row['entry_price'] else None
+            self.trailing_stop_price = float(row['trailing_stop_price']) if row['trailing_stop_price'] else None
+            self.highest_price = float(row['highest_price']) if row['highest_price'] else None
             self.last_timestamp = row['last_timestamp']
             self.entry_time = row['entry_time']
             logger.info("Loaded state from the database.")
         else:
             logger.info("No existing state found in the database. Initializing new state from trade_signals.")
             self.initialize_state_from_signals()
-
-    def initialize_state_from_signals(self):
-        """
-        Initializes the state based on the latest BUY signal from the trade_signals table.
-        """
-        check_state_query = "SELECT COUNT(*) FROM bot_state;"
-        count = self.db_handler.fetch_one(check_state_query)['count']
-
-        if count == 0:
-            logger.info("No state found, initializing from the latest BUY signal in trade_signals.")
-            query = """
-                SELECT timestamp, price, updated_capital 
-                FROM trade_signals 
-                WHERE signal_type = 'BUY'
-                ORDER BY timestamp DESC 
-                LIMIT 1;
-            """
-            row = self.db_handler.fetch_one(query)
-            if row:
-                insert_query = """
-                    INSERT INTO bot_state (capital, position, entry_price, trailing_stop_price, highest_price, last_timestamp, entry_time)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s);
-                """
-                trailing_stop_price = row['price'] * (1 - self.trailing_stop_loss_percentage)
-                params = (
-                    row['updated_capital'], 'long', row['price'],
-                    trailing_stop_price, row['price'], row['timestamp'], row['timestamp']
-                )
-                self.db_handler.execute(insert_query, params)
-                logger.info("State initialized from the latest BUY signal.")
-
-    def save_state(self):
-        """
-        Saves the current state to the database.
-        """
-        query = """
-            INSERT INTO bot_state (capital, position, entry_price, trailing_stop_price, highest_price, last_timestamp, entry_time)
-            VALUES (%s, %s, %s, %s, %s, %s, %s);
-        """
-        params = (
-            self.capital, self.position, self.entry_price,
-            self.trailing_stop_price, self.highest_price,
-            self.last_timestamp, self.entry_time
-        )
-        self.db_handler.execute(query, params)
-        logger.info("State saved to the database.")
 
     def get_latest_price_data(self):
         """
@@ -119,7 +73,16 @@ class TradingBot:
             ORDER BY timestamp DESC
             LIMIT 1;
         """
-        return self.db_handler.fetch_one(query)
+        row = self.db_handler.fetch_one(query)
+        if row:
+            return {
+                'timestamp': row['timestamp'],
+                'last_price': float(row['last_price']),  # Convert Decimal to float
+                'vwap': float(row['vwap'])  # Convert Decimal to float
+            }
+        else:
+            logger.warning("No XRP data found in the database.")
+            return None
 
     def process_new_data(self):
         """
@@ -130,8 +93,8 @@ class TradingBot:
             return
 
         try:
-            price = float(price_data['last_price'])
-            vwap = float(price_data['vwap'])
+            price = price_data['last_price']
+            vwap = price_data['vwap']
             timestamp = price_data['timestamp']
 
             if self.last_timestamp and timestamp <= self.last_timestamp:
@@ -180,6 +143,22 @@ class TradingBot:
 
         except Exception as e:
             logger.error(f"An error occurred while processing data: {e}")
+
+    def save_state(self):
+        """
+        Saves the current state to the database.
+        """
+        query = """
+            INSERT INTO bot_state (capital, position, entry_price, trailing_stop_price, highest_price, last_timestamp, entry_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s);
+        """
+        params = (
+            self.capital, self.position, self.entry_price,
+            self.trailing_stop_price, self.highest_price,
+            self.last_timestamp, self.entry_time
+        )
+        self.db_handler.execute(query, params)
+        logger.info("State saved to the database.")
 
     def save_trade_signal(self, signal_type, price, profit_loss, percent_change, time_held):
         """
