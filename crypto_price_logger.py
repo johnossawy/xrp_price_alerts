@@ -14,6 +14,10 @@ from database_handler import DatabaseHandler  # Import your updated DatabaseHand
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Remove any default handlers from the root logger to prevent logging to console
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
 # Avoid adding multiple handlers if the logger already has handlers
 if not logger.handlers:
     handler = RotatingFileHandler(
