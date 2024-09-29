@@ -121,16 +121,34 @@ class TradingBot:
                     logger.info(f"🔄 Trailing Stop Updated: New Stop Price is ${self.trailing_stop_price:.5f} (Highest Price: ${self.highest_price:.5f})")
                     self.save_state()
 
-                # Make datetime.now() timezone-aware to match entry_time from the database
-                now = datetime.now(timezone.utc)  # Makes datetime.now() UTC aware
+                now = datetime.now(timezone.utc)
 
                 if price <= self.trailing_stop_price or price >= self.entry_price * (1 + self.take_profit_threshold) or price <= self.entry_price * (1 + self.stop_loss_threshold):
                     price_change = (price - self.entry_price) / self.entry_price
                     profit_loss = self.capital * price_change
                     self.capital += profit_loss
 
-                    time_held = now - self.entry_time  # This should now work correctly
-                    message = f"🚨 *Sell Signal Triggered*\nSold at ${price:.5f}\nProfit/Loss: ${profit_loss:.2f}\nUpdated Capital: ${self.capital:.2f}"
+                    time_held = now - self.entry_time
+
+                    # Format time held as hours, minutes, and seconds
+                    hours, remainder = divmod(time_held.total_seconds(), 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    time_held_formatted = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+
+                    # Determine if it is a profit or loss and adjust the message accordingly
+                    if profit_loss >= 0:
+                        result_message = f"💰 Profit: ${profit_loss:.2f}"
+                    else:
+                        result_message = f"🔻 Loss: ${abs(profit_loss):.2f}"
+
+                    message = (
+                        f"🚨 *Sell Signal Triggered*\n"
+                        f"Sold at ${price:.5f}\n"
+                        f"{result_message}\n"
+                        f"Time Held: {time_held_formatted}\n"
+                        f"Updated Capital: ${self.capital:.2f}"
+                    )
+
                     logger.info(message)
                     send_telegram_message(message)
 
