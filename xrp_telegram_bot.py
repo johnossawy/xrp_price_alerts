@@ -1,9 +1,11 @@
 # xrp_telegram_bot.py
 
 import logging
+import time
 from typing import Union  # Import Union for type annotations
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.error import NetworkError  # Import NetworkError for better error handling
 from config import TELEGRAM_BOT_TOKEN  # Importing from config file
 from database_handler import DatabaseHandler  # Import your updated DatabaseHandler
 
@@ -111,6 +113,31 @@ def get_last_signal() -> str:
         logging.error(f"Error retrieving last trading signal: {e}")
         return "Error retrieving trading signal."
 
+# Retry logic for fetching updates with exponential backoff
+def get_updates_with_retry(bot, retries=5, delay=5):
+    """
+    Function to handle retries when fetching updates from Telegram.
+
+    Args:
+        bot: The Telegram bot instance.
+        retries (int): Number of retries before giving up.
+        delay (int): Initial delay in seconds between retries (with exponential backoff).
+
+    Returns:
+        Updates object or None if failure occurs.
+    """
+    for attempt in range(retries):
+        try:
+            updates = bot.get_updates()
+            return updates  # Return updates if successful
+        except NetworkError as e:
+            logging.error(f"NetworkError: {e}. Retrying {attempt + 1}/{retries}...")
+            time.sleep(delay * (attempt + 1))  # Exponential backoff
+        except Exception as e:
+            logging.error(f"Unexpected error: {e}")
+            break  # If it's an unknown error, break out of the loop
+    return None
+
 # Command handlers
 def start(update: Update, context: CallbackContext) -> None:
     """Handle the /start command."""
@@ -142,10 +169,17 @@ def main():
     dp.add_handler(CommandHandler("price", price))
     dp.add_handler(CommandHandler("lastsignal", lastsignal))
 
-    # Start the bot
-    updater.start_polling()
-    logging.info("XRP Telegram Bot started polling.")
-    updater.idle()
+    # Start the bot with error handling and retry logic
+    try:
+        logging.info("Starting XRP Telegram Bot...")
+        updater.start_polling()
+    except NetworkError as e:
+        logging.error(f"NetworkError occurred: {e}. Restarting bot...")
+        get_updates_with_retry(updater.bot)  # Retry fetching updates
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+    finally:
+        updater.idle()
 
 if __name__ == "__main__":
     main()

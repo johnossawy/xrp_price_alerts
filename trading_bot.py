@@ -102,6 +102,7 @@ class TradingBot:
 
             self.last_timestamp = timestamp
 
+            # Buy signal logic
             if (price - vwap) / vwap <= self.oversold_threshold and self.position is None:
                 self.position = 'long'
                 self.entry_price = price
@@ -111,9 +112,14 @@ class TradingBot:
 
                 message = f"⚠️ *Buy Signal Triggered*\nBought at: ${price:.5f} on {timestamp}"
                 logger.info(message)
+
+                # Save the BUY signal to the database
+                self.save_trade_signal('BUY', price, profit_loss=None, percent_change=None, time_held=None)
+
                 send_telegram_message(message)
                 self.save_state()
 
+            # Sell signal logic (unchanged)
             if self.position == 'long':
                 if price > self.highest_price:
                     self.highest_price = price
@@ -152,7 +158,8 @@ class TradingBot:
                     logger.info(message)
                     send_telegram_message(message)
 
-                    self.save_trade_signal('SELL', price, profit_loss, price_change, time_held)
+                    # Save the SELL signal to the database
+                    self.save_trade_signal('SELL', price, profit_loss, price_change, time_held_formatted)
 
                     self.position = None
                     self.entry_price = None
