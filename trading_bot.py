@@ -110,7 +110,17 @@ class TradingBot:
                 self.trailing_stop_price = self.entry_price * (1 - self.trailing_stop_loss_percentage)
                 self.entry_time = timestamp
 
-                message = f"⚠️ *Buy Signal Triggered*\nBought at: ${price:.5f} on {timestamp}"
+                # Format timestamp to YYYY-MM-DD HH:MM:SS
+                formatted_entry_time = self.entry_time.strftime('%Y-%m-%d %H:%M:%S')
+
+                # Improved buy signal message formatting
+                message = (
+                    f"⚠️ *Buy Signal Triggered*\n\n"
+                    f"📅 *Date/Time:* {formatted_entry_time}\n"
+                    f"💰 *Bought at:* ${price:.5f}\n"
+                    f"💡 Stay tuned for the next update!\n"
+                    f"#Ripple #XRP"
+                )
                 logger.info(message)
 
                 # Save the BUY signal to the database
@@ -119,7 +129,7 @@ class TradingBot:
                 send_telegram_message(message)
                 self.save_state()
 
-            # Sell signal logic (unchanged)
+            # Sell signal logic
             if self.position == 'long':
                 if price > self.highest_price:
                     self.highest_price = price
@@ -141,6 +151,9 @@ class TradingBot:
                     minutes, seconds = divmod(remainder, 60)
                     time_held_formatted = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
 
+                    # Format the sell execution time to YYYY-MM-DD HH:MM:SS
+                    formatted_sell_time = now.strftime('%Y-%m-%d %H:%M:%S')
+
                     # Determine if it is a profit or loss and adjust the message accordingly
                     if profit_loss >= 0:
                         result_message = f"💰 Profit: ${profit_loss:.2f}"
@@ -148,11 +161,12 @@ class TradingBot:
                         result_message = f"🔻 Loss: ${abs(profit_loss):.2f}"
 
                     message = (
-                        f"🚨 *Sell Signal Triggered*\n"
-                        f"Sold at ${price:.5f}\n"
+                        f"🚨 *Sell Signal Triggered*\n\n"
+                        f"📅 *Date/Time:* {formatted_sell_time}\n"
+                        f"💸 *Sold at:* ${price:.5f}\n"
                         f"{result_message}\n"
-                        f"Time Held: {time_held_formatted}\n"
-                        f"Updated Capital: ${self.capital:.2f}"
+                        f"⏳ *Time Held:* {time_held_formatted}\n"
+                        f"💼 *Updated Capital:* ${self.capital:.2f}\n"
                     )
 
                     logger.info(message)
