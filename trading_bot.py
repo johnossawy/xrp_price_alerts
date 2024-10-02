@@ -1,5 +1,7 @@
+#trading_bot.py
+
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from logging.handlers import RotatingFileHandler
 from database_handler import DatabaseHandler
 from telegram_bot import send_telegram_message
@@ -26,6 +28,7 @@ class TradingBot:
         self.highest_price = None
         self.last_timestamp = None
         self.entry_time = None
+        self.last_loss_time = None  # Track the time of the last loss
 
         # Define thresholds
         self.overbought_threshold = 0.01
@@ -102,33 +105,35 @@ class TradingBot:
 
             self.last_timestamp = timestamp
 
-            # Buy signal logic
+            now = datetime.now(timezone.utc)
+
+            # Buy signal logic with delay if previous trade resulted in a loss
             if (price - vwap) / vwap <= self.oversold_threshold and self.position is None:
-                self.position = 'long'
-                self.entry_price = price
-                self.highest_price = price
-                self.trailing_stop_price = self.entry_price * (1 - self.trailing_stop_loss_percentage)
-                self.entry_time = timestamp
+                if self.last_loss_time is None or (now - self.last_loss_time) >= timedelta(minutes=30):
+                    self.position = 'long'
+                    self.entry_price = price
+                    self.highest_price = price
+                    self.trailing_stop_price = self.entry_price * (1 - self.trailing_stop_loss_percentage)
+                    self.entry_time = timestamp
 
-                # Format timestamp to YYYY-MM-DD HH:MM:SS
-                formatted_entry_time = self.entry_time.strftime('%Y-%m-%d %H:%M:%S')
+                    formatted_entry_time = self.entry_time.strftime('%Y-%m-%d %H:%M:%S')
 
-                # Improved buy signal message formatting
-                message = (
-                    f"⚠️ *Buy Signal Triggered*\n\n"
-                    f"📅 *Date/Time:* {formatted_entry_time}\n"
-                    f"💰 *Bought at:* ${price:.5f}\n"
-                    f"💡 Stay tuned for the next update!\n"
-                    f"#Ripple #XRP"
-                )
-                logger.info(message)
+                    message = (
+                        f"⚠️ *Buy Signal Triggered*\n\n"
+                        f"📅 *Date/Time:* {formatted_entry_time}\n"
+                        f"💰 *Bought at:* ${price:.5f}\n"
+                        f"💡 Stay tuned for the next update!\n"
+                        f"#Ripple #XRP"
+                    )
+                    logger.info(message)
 
-                # Save the BUY signal to the database
-                self.save_trade_signal('BUY', price, profit_loss=None, percent_change=None, time_held=None)
+                    # Save the BUY signal to the database
+                    self.save_trade_signal('BUY', price, profit_loss=None, percent_change=None, time_held=None)
 
-                send_telegram_message(message)
-                self.save_state()
-
+                    send_telegram_message(message)
+                    self.save_state()
+                else:
+                    logger.info("Buy signal delayed due to recent trade loss.")
             # Sell signal logic
             if self.position == 'long':
                 if price > self.highest_price:
@@ -136,8 +141,6 @@ class TradingBot:
                     self.trailing_stop_price = self.highest_price * (1 - self.trailing_stop_loss_percentage)
                     logger.info(f"🔄 Trailing Stop Updated: New Stop Price is ${self.trailing_stop_price:.5f} (Highest Price: ${self.highest_price:.5f})")
                     self.save_state()
-
-                now = datetime.now(timezone.utc)
 
                 if price <= self.trailing_stop_price or price >= self.entry_price * (1 + self.take_profit_threshold) or price <= self.entry_price * (1 + self.stop_loss_threshold):
                     price_change = (price - self.entry_price) / self.entry_price
@@ -157,8 +160,10 @@ class TradingBot:
                     # Determine if it is a profit or loss and adjust the message accordingly
                     if profit_loss >= 0:
                         result_message = f"💰 Profit: ${profit_loss:.2f}"
+                        self.last_loss_time = None  # Reset the loss time if profit
                     else:
                         result_message = f"🔻 Loss: ${abs(profit_loss):.2f}"
+                        self.last_loss_time = now  # Set the last loss time if loss
 
                     message = (
                         f"🚨 *Sell Signal Triggered*\n\n"

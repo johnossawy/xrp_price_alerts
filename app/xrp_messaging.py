@@ -184,7 +184,7 @@ def generate_xrp_chart(rapidapi_key):
     return None
 
 
-def cleanup_old_charts(directory='.', days=7):
+def cleanup_old_charts(directory='.', days=1):
     """
     Delete chart files older than a specified number of days.
 
