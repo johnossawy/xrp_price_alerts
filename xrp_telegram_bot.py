@@ -132,8 +132,8 @@ def get_current_capital() -> Union[float, str]:
 def set_current_capital(new_capital: float) -> str:
     try:
         query = """
-            INSERT INTO trade_signals (updated_capital, timestamp)
-            VALUES (%(new_capital)s, NOW());
+            INSERT INTO trade_signals (updated_capital, timestamp, signal_type)
+            VALUES (%(new_capital)s, NOW(), 'UPDATE');  -- Default 'UPDATE' signal type
         """
         params = {'new_capital': new_capital}
         db_handler.execute(query, params)
