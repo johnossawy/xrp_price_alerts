@@ -180,7 +180,7 @@ class TradingBot:
             if 'error' in fees:
                 logger.error(f"Error fetching fees: {fees['error']}")
                 return
-            fee_percentage = float(fees['fees'].get('taker', '0').strip('%'))
+            fee_percentage = float(fees['fees'].get('maker', '0').strip('%'))
             if fee_percentage == 0:
                 logger.warning("Defaulting to 0% trading fee as no valid fee was returned.")
 
