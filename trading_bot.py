@@ -27,6 +27,13 @@ if not logger.handlers:
 # Load API key and secret from environment variables
 BITSTAMP_MAIN_KEY = os.getenv("BITSTAMP_MAIN_KEY")
 BITSTAMP_MAIN_SECRET = os.getenv("BITSTAMP_MAIN_SECRET")
+if BITSTAMP_MAIN_SECRET:
+    BITSTAMP_MAIN_SECRET = BITSTAMP_MAIN_SECRET.encode('utf-8')
+
+# Check if API key and secret are set
+if not BITSTAMP_MAIN_KEY or not BITSTAMP_MAIN_SECRET:
+    logger.error("API key or secret is missing. Please set BITSTAMP_MAIN_KEY and BITSTAMP_MAIN_SECRET.")
+    raise ValueError("Missing Bitstamp API key or secret.")
 
 class TradingBot:
     def __init__(self):
@@ -174,6 +181,9 @@ class TradingBot:
                 logger.error(f"Error fetching fees: {fees['error']}")
                 return
             fee_percentage = float(fees['fees'].get('taker', '0').strip('%'))
+            if fee_percentage == 0:
+                logger.warning("Defaulting to 0% trading fee as no valid fee was returned.")
+
 
             # Buy signal logic with delay if previous trade resulted in a loss
             if (price - vwap) / vwap <= self.oversold_threshold and self.position is None:
@@ -224,7 +234,7 @@ class TradingBot:
                     amount_traded = self.capital / self.entry_price
                     sell_fee = self.calculate_trade_fees(price, amount_traded, fee_percentage)
                     profit_loss -= sell_fee  # Deduct sell fee from profit/loss
-                    self.capital += profit_loss
+                    self.capital += (profit_loss - sell_fee)
 
                     time_held = now - self.entry_time
 
