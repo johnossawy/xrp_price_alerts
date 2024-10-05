@@ -6,6 +6,12 @@ from logging.handlers import RotatingFileHandler
 from database_handler import DatabaseHandler
 from telegram_bot import send_telegram_message
 from decimal import Decimal
+import hashlib
+import hmac
+import time
+import requests
+import uuid
+import os
 
 # Set up logging with rotating handler
 logger = logging.getLogger()
@@ -18,10 +24,14 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+# Load API key and secret from environment variables
+BITSTAMP_MAIN_KEY = os.getenv("BITSTAMP_MAIN_KEY")
+BITSTAMP_MAIN_SECRET = os.getenv("BITSTAMP_MAIN_SECRET")
+
 class TradingBot:
-    def __init__(self, initial_capital=12800.0):
-        self.initial_capital = initial_capital
-        self.capital = initial_capital
+    def __init__(self):
+        # Remove the initial_capital argument and assignment
+        self.capital = None
         self.position = None
         self.entry_price = None
         self.trailing_stop_price = None
@@ -87,6 +97,57 @@ class TradingBot:
             logger.warning("No XRP data found in the database.")
             return None
 
+    def get_trading_fees(self, market_symbol: str) -> dict:
+        """
+        Fetch trading fees for the specified market.
+        """
+        try:
+            timestamp = str(int(round(time.time() * 1000)))
+            nonce = str(uuid.uuid4())
+
+            message = 'BITSTAMP ' + BITSTAMP_MAIN_KEY + \
+                      'POST' + \
+                      'www.bitstamp.net' + \
+                      f'/api/v2/fees/trading/{market_symbol}/' + \
+                      '' + \
+                      '' + \
+                      nonce + \
+                      timestamp + \
+                      'v2' + \
+                      ''  # No payload in this case
+
+            message = message.encode('utf-8')
+            signature = hmac.new(BITSTAMP_MAIN_SECRET, msg=message, digestmod=hashlib.sha256).hexdigest()
+
+            # Set up headers
+            headers = {
+                'X-Auth': 'BITSTAMP ' + BITSTAMP_MAIN_KEY,
+                'X-Auth-Signature': signature,
+                'X-Auth-Nonce': nonce,
+                'X-Auth-Timestamp': timestamp,
+                'X-Auth-Version': 'v2'
+            }
+
+            # Make the POST request to the trading fees endpoint
+            url = f'https://www.bitstamp.net/api/v2/fees/trading/{market_symbol}/'
+            response = requests.post(url, headers=headers)
+
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {'error': response.text}
+
+        except Exception as e:
+            return {'error': str(e)}
+
+    def calculate_trade_fees(self, price: float, amount: float, fee_percentage: float) -> float:
+        """
+        Calculate the fee for a trade based on price, amount, and fee percentage.
+        """
+        trade_value = price * amount  # Total trade value in USD
+        fee = trade_value * (fee_percentage / 100)  # Fee as a percentage of trade value
+        return fee
+
     def process_new_data(self):
         """
         Processes the latest price data and manages buy/sell signals based on trading logic.
@@ -107,6 +168,13 @@ class TradingBot:
 
             now = datetime.now(timezone.utc)
 
+            # Fetch trading fees
+            fees = self.get_trading_fees("xrpusd")
+            if 'error' in fees:
+                logger.error(f"Error fetching fees: {fees['error']}")
+                return
+            fee_percentage = float(fees['fees'].get('taker', '0').strip('%'))
+
             # Buy signal logic with delay if previous trade resulted in a loss
             if (price - vwap) / vwap <= self.oversold_threshold and self.position is None:
                 if self.last_loss_time is None or (now - self.last_loss_time) >= timedelta(minutes=30):
@@ -116,12 +184,18 @@ class TradingBot:
                     self.trailing_stop_price = self.entry_price * (1 - self.trailing_stop_loss_percentage)
                     self.entry_time = timestamp
 
+                    # Calculate trading fee for buy
+                    amount_traded = self.capital / price
+                    buy_fee = self.calculate_trade_fees(price, amount_traded, fee_percentage)
+                    self.capital -= buy_fee  # Deduct buy fee from capital
+
                     formatted_entry_time = self.entry_time.strftime('%Y-%m-%d %H:%M:%S')
 
                     message = (
                         f"⚠️ *Buy Signal Triggered*\n\n"
                         f"📅 *Date/Time:* {formatted_entry_time}\n"
                         f"💰 *Bought at:* ${price:.5f}\n"
+                        f"💸 *Trading Fee Applied:* ${buy_fee:.2f}\n"
                         f"💡 Stay tuned for the next update!\n"
                         f"#Ripple #XRP"
                     )
@@ -145,6 +219,11 @@ class TradingBot:
                 if price <= self.trailing_stop_price or price >= self.entry_price * (1 + self.take_profit_threshold) or price <= self.entry_price * (1 + self.stop_loss_threshold):
                     price_change = (price - self.entry_price) / self.entry_price
                     profit_loss = self.capital * price_change
+                    
+                    # Calculate trading fee for sell
+                    amount_traded = self.capital / self.entry_price
+                    sell_fee = self.calculate_trade_fees(price, amount_traded, fee_percentage)
+                    profit_loss -= sell_fee  # Deduct sell fee from profit/loss
                     self.capital += profit_loss
 
                     time_held = now - self.entry_time
@@ -169,6 +248,7 @@ class TradingBot:
                         f"🚨 *Sell Signal Triggered*\n\n"
                         f"📅 *Date/Time:* {formatted_sell_time}\n"
                         f"💸 *Sold at:* ${price:.5f}\n"
+                        f"💸 *Trading Fee Applied:* ${sell_fee:.2f}\n"
                         f"{result_message}\n"
                         f"⏳ *Time Held:* {time_held_formatted}\n"
                         f"💼 *Updated Capital:* ${self.capital:.2f}\n"
