@@ -41,11 +41,15 @@ def post_tweet(client, tweet_text, media_id=None):
         logging.info(f"Tweet posted: {tweet_text}")
         return response
     except tweepy.TooManyRequests as e:
-        logging.warning("Rate limit reached. Sleeping for 15 minutes.")
+        logging.warning(f"Rate limit reached: {e}. Sleeping for 15 minutes.")
         time.sleep(900)  # Sleep for 15 minutes
         return post_tweet(client, tweet_text, media_id)
     except tweepy.TweepyException as e:
+        # Log detailed error information
         logging.error(f"Tweepy error occurred: {e}")
+        if e.response:
+            logging.error(f"Response status code: {e.response.status_code}")
+            logging.error(f"Response body: {e.response.text}")
     except Exception as e:
         logging.error(f"Unexpected error occurred: {e}")
     return None
