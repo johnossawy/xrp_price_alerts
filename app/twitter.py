@@ -1,12 +1,11 @@
+from datetime import datetime
 import tweepy
 import tweepy.errors
 import logging
 import time
-from requests.auth import OAuth1
-from datetime import datetime
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+# No need to import OAuth1 from requests, remove the following line:
+# from requests.auth import OAuth1
 
 def get_twitter_client(api_key, api_secret, access_token, access_token_secret):
     """Get Twitter client"""
@@ -36,10 +35,10 @@ def upload_media(api, filename):
         logging.error(f"Unexpected error during media upload: {e}")
         return None
 
-def check_rate_limit(client):
+def check_rate_limit(api):
     """Check Twitter rate limit status and log it."""
     try:
-        response = client.get_application_rate_limit_status()
+        response = api.rate_limit_status()
         statuses_limit = response['resources']['statuses']['/statuses/update']
         
         remaining = statuses_limit['remaining']
