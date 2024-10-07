@@ -2,6 +2,15 @@ import tweepy
 import tweepy.errors
 import logging
 import time
+from telegram_bot import send_telegram_message  # Assuming this is your function
+
+def send_telegram_alert(message):
+    """Send a Telegram alert for rate limits."""
+    try:
+        send_telegram_message(message)
+        logging.info("Telegram alert sent successfully.")
+    except Exception as e:
+        logging.error(f"Failed to send Telegram alert: {e}")
 
 def get_twitter_client(api_key, api_secret, access_token, access_token_secret):
     """Get Twitter client"""
@@ -42,6 +51,12 @@ def post_tweet(client, tweet_text, media_id=None):
         return response
     except tweepy.TooManyRequests as e:
         logging.warning(f"Rate limit reached: {e}. Sleeping for 15 minutes.")
+
+        # Send a Telegram alert when rate limit is reached
+        send_telegram_alert(
+            "Rate limit reached! Sleeping for 15 minutes."
+        )
+
         time.sleep(900)  # Sleep for 15 minutes
         return post_tweet(client, tweet_text, media_id)
     except tweepy.TweepyException as e:
