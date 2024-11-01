@@ -1,5 +1,4 @@
 import tweepy
-import tweepy.errors
 import logging
 import time
 from telegram_bot import send_telegram_message  # Assuming this is your function
@@ -13,7 +12,7 @@ def send_telegram_alert(message):
         logging.error(f"Failed to send Telegram alert: {e}")
 
 def get_twitter_client(api_key, api_secret, access_token, access_token_secret):
-    """Get Twitter client"""
+    """Get Twitter client for Twitter API v2"""
     client = tweepy.Client(
         consumer_key=api_key,
         consumer_secret=api_secret,
@@ -23,7 +22,7 @@ def get_twitter_client(api_key, api_secret, access_token, access_token_secret):
     return client
 
 def get_twitter_api(api_key, api_secret, access_token, access_token_secret):
-    """Get Twitter API for media uploads"""
+    """Get Twitter API for media uploads using OAuth1 for v1.1"""
     auth = tweepy.OAuth1UserHandler(api_key, api_secret, access_token, access_token_secret)
     api = tweepy.API(auth)
     return api
@@ -49,18 +48,17 @@ def post_tweet(client, tweet_text, media_id=None):
             response = client.create_tweet(text=tweet_text)
         logging.info(f"Tweet posted: {tweet_text}")
         return response
-    except tweepy.TooManyRequests as e:
+    except tweepy.errors.TooManyRequests as e:
         logging.warning(f"Rate limit reached: {e}. Sleeping for 15 minutes.")
 
         # Send a Telegram alert when rate limit is reached
-        send_telegram_alert(
-            "Rate limit reached! Sleeping for 15 minutes."
-        )
+        send_telegram_alert("Rate limit reached! Sleeping for 15 minutes.")
 
         time.sleep(900)  # Sleep for 15 minutes
+
+        # Re-authenticate (optional) after sleep in long-running scripts
         return post_tweet(client, tweet_text, media_id)
     except tweepy.TweepyException as e:
-        # Log detailed error information
         logging.error(f"Tweepy error occurred: {e}")
         if e.response:
             logging.error(f"Response status code: {e.response.status_code}")
