@@ -26,6 +26,11 @@ from config import (
 from database_handler import DatabaseHandler
 from app.xrp_messaging import cleanup_old_charts  # Import the cleanup function
 
+ENABLE_HOURLY_TWEET = False        # Set to False to disable hourly tweets
+ENABLE_3_HOUR_SUMMARY = True      # Set to False to disable 3-hour summaries
+ENABLE_VOLATILITY_ALERT = True    # Set to False to disable volatility alerts
+ENABLE_DAILY_SUMMARY = True       # Set to False to disable daily summary
+
 # Configure logging with RotatingFileHandler
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -268,137 +273,141 @@ class XRPPriceAlertBot:
         self.last_full_price = full_price
 
         # Hourly tweet logic with 5-minute grace period
-        if self.last_tweet_hour != current_hour and current_minute < 5:
-            if self.last_rounded_price is not None:
-                logger.info(
-                    f"Comparing last_rounded_price={self.last_rounded_price} with rounded_price={rounded_price}"
-                )
-                percent_change = get_percent_change(
-                    self.last_rounded_price, rounded_price
-                )
-                logger.info(f"Calculated percent_change={percent_change:.2f}%")
-
-                tweet_text = generate_message(
-                    self.last_rounded_price, rounded_price
-                )
-                try:
-                    post_tweet(self.client, tweet_text)
-                    logger.info(f"Hourly tweet posted: {tweet_text}")
-                    self.last_tweet_hour = current_hour
-                    
-                    # Save hourly update to the new twitter_bot_activity table
-                    self.save_bot_activity_to_db('hourly_update', rounded_price)
-
-                except Exception as e:
-                    logger.error(f"Error posting tweet: {type(e).__name__} - {e}")
-
-                # Save the current rounded price after posting
-                self.last_rounded_price = rounded_price
-            else:
-                logger.warning("last_rounded_price is None, skipping hourly tweet.")
-
-        # Generate and post 3-hour summary tweet with chart
-        if (
-            (current_hour, 0) in self.SUMMARY_TIMES
-            and (self.last_summary_time is None or self.last_summary_time.hour != current_hour)
-        ):
-            if current_minute < 5:
-                logger.info("3-hour summary condition met. Attempting to generate and post.")
-                try:
-                    summary_text, chart_filename = generate_3_hour_summary(
-                        self.db_handler, full_price, RAPIDAPI_KEY
+        if ENABLE_HOURLY_TWEET:
+            if self.last_tweet_hour != current_hour and current_minute < 5:
+                if self.last_rounded_price is not None:
+                    logger.info(
+                        f"Comparing last_rounded_price={self.last_rounded_price} with rounded_price={rounded_price}"
                     )
-                    if summary_text and chart_filename:
-                        media_id = upload_media(self.api, chart_filename)
-                        post_tweet(self.client, summary_text, media_id)
-                        logger.info(
-                            f"3-hour summary tweet with chart posted: {summary_text}"
-                        )
-                        self.last_summary_time = current_time
-                        
-                        # Save 3-hour summary to the new twitter_bot_activity table
-                        self.save_bot_activity_to_db('3_hour_summary', rounded_price, summary_text=summary_text)
-
-                    else:
-                        logger.error(
-                            "3-hour summary generation failed: No summary text or chart filename generated."
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"Error during 3-hour summary generation: {type(e).__name__} - {e}"
+                    percent_change = get_percent_change(
+                        self.last_rounded_price, rounded_price
                     )
+                    logger.info(f"Calculated percent_change={percent_change:.2f}%")
 
-        # Volatility check logic with 15-minute interval
-        if self.last_volatility_check_time is None or (
-            current_time - self.last_volatility_check_time
-        ) >= timedelta(minutes=15):
-            logger.info(
-                f"Checking for volatility: last_checked_price={self.last_checked_price}, full_price={full_price}"
-            )
-            if self.last_checked_price is not None:
-                percent_change = get_percent_change(
-                    self.last_checked_price, full_price
-                )
-                if abs(percent_change) >= self.VOLATILITY_THRESHOLD * 100:
                     tweet_text = generate_message(
-                        self.last_checked_price,
-                        rounded_price,
-                        is_volatility_alert=True,
+                        self.last_rounded_price, rounded_price
                     )
                     try:
                         post_tweet(self.client, tweet_text)
-                        logger.info(f"Volatility alert tweet posted: {tweet_text}")
+                        logger.info(f"Hourly tweet posted: {tweet_text}")
+                        self.last_tweet_hour = current_hour
+                        
+                        # Save hourly update to the new twitter_bot_activity table
+                        self.save_bot_activity_to_db('hourly_update', rounded_price)
+
+                    except Exception as e:
+                        logger.error(f"Error posting tweet: {type(e).__name__} - {e}")
+
+                    # Save the current rounded price after posting
+                    self.last_rounded_price = rounded_price
+                else:
+                    logger.warning("last_rounded_price is None, skipping hourly tweet.")
+
+        # Generate and post 3-hour summary tweet with chart
+        if ENABLE_3_HOUR_SUMMARY:
+            if (
+                (current_hour, 0) in self.SUMMARY_TIMES
+                and (self.last_summary_time is None or self.last_summary_time.hour != current_hour)
+            ):
+                if current_minute < 5:
+                    logger.info("3-hour summary condition met. Attempting to generate and post.")
+                    try:
+                        summary_text, chart_filename = generate_3_hour_summary(
+                            self.db_handler, full_price, RAPIDAPI_KEY
+                        )
+                        if summary_text and chart_filename:
+                            media_id = upload_media(self.api, chart_filename)
+                            post_tweet(self.client, summary_text, media_id)
+                            logger.info(
+                                f"3-hour summary tweet with chart posted: {summary_text}"
+                            )
+                            self.last_summary_time = current_time
+                            
+                            # Save 3-hour summary to the new twitter_bot_activity table
+                            self.save_bot_activity_to_db('3_hour_summary', rounded_price, summary_text=summary_text)
+
+                        else:
+                            logger.error(
+                                "3-hour summary generation failed: No summary text or chart filename generated."
+                            )
                     except Exception as e:
                         logger.error(
-                            f"Error posting volatility alert tweet: {type(e).__name__} - {e}"
+                            f"Error during 3-hour summary generation: {type(e).__name__} - {e}"
                         )
-                self.last_checked_price = rounded_price
-            else:
-                self.last_checked_price = rounded_price
 
-            self.last_volatility_check_time = current_time
+        # Volatility check logic with 15-minute interval
+        if ENABLE_VOLATILITY_ALERT:
+            if self.last_volatility_check_time is None or (
+                current_time - self.last_volatility_check_time
+            ) >= timedelta(minutes=15):
+                logger.info(
+                    f"Checking for volatility: last_checked_price={self.last_checked_price}, full_price={full_price}"
+                )
+                if self.last_checked_price is not None:
+                    percent_change = get_percent_change(
+                        self.last_checked_price, full_price
+                    )
+                    if abs(percent_change) >= self.VOLATILITY_THRESHOLD * 100:
+                        tweet_text = generate_message(
+                            self.last_checked_price,
+                            rounded_price,
+                            is_volatility_alert=True,
+                        )
+                        try:
+                            post_tweet(self.client, tweet_text)
+                            logger.info(f"Volatility alert tweet posted: {tweet_text}")
+                        except Exception as e:
+                            logger.error(
+                                f"Error posting volatility alert tweet: {type(e).__name__} - {e}"
+                            )
+                    self.last_checked_price = rounded_price
+                else:
+                    self.last_checked_price = rounded_price
+
+                self.last_volatility_check_time = current_time
 
         # Daily summary posting at 8 PM UTC
-        if current_hour == 20 and 0 <= current_minute < 5:
-            if (
-                self.last_daily_summary_time is None
-                or self.last_daily_summary_time.date() < self.current_day
-            ):
-                if self.daily_high is not None and self.daily_low is not None:
-                    # Generate and post the daily summary
-                    summary_text = generate_daily_summary_message(
-                        self.daily_high, self.daily_low
-                    )
-                    try:
-                        post_tweet(self.client, summary_text)
-                        logger.info(f"Daily summary tweet posted: {summary_text}")
-                        
-                        # Save daily summary to the new twitter_bot_activity table
-                        self.save_bot_activity_to_db('daily_summary', rounded_price, summary_text=summary_text)
+        if ENABLE_DAILY_SUMMARY:
+            if current_hour == 20 and 0 <= current_minute < 5:
+                if (
+                    self.last_daily_summary_time is None
+                    or self.last_daily_summary_time.date() < self.current_day
+                ):
+                    if self.daily_high is not None and self.daily_low is not None:
+                        # Generate and post the daily summary
+                        summary_text = generate_daily_summary_message(
+                            self.daily_high, self.daily_low
+                        )
+                        try:
+                            post_tweet(self.client, summary_text)
+                            logger.info(f"Daily summary tweet posted: {summary_text}")
+                            
+                            # Save daily summary to the new twitter_bot_activity table
+                            self.save_bot_activity_to_db('daily_summary', rounded_price, summary_text=summary_text)
 
-                    except Exception as e:
-                        logger.error(
-                            f"Error posting daily summary tweet: {type(e).__name__} - {e}"
+                        except Exception as e:
+                            logger.error(
+                                f"Error posting daily summary tweet: {type(e).__name__} - {e}"
+                            )
+
+                        # Update the last summary time to prevent multiple posts
+                        self.last_daily_summary_time = current_time
+                        logger.info(
+                            f"Updated last_daily_summary_time to: {self.last_daily_summary_time}"
                         )
 
-                    # Update the last summary time to prevent multiple posts
-                    self.last_daily_summary_time = current_time
-                    logger.info(
-                        f"Updated last_daily_summary_time to: {self.last_daily_summary_time}"
-                    )
-
-                    # Reset daily high and low for the next day
-                    self.daily_high = None
-                    self.daily_low = None
-                    logger.info("Reset daily_high and daily_low after posting daily summary.")
+                        # Reset daily high and low for the next day
+                        self.daily_high = None
+                        self.daily_low = None
+                        logger.info("Reset daily_high and daily_low after posting daily summary.")
+                    else:
+                        logger.warning(
+                            "Daily high and low are None, cannot post daily summary."
+                        )
                 else:
-                    logger.warning(
-                        "Daily high and low are None, cannot post daily summary."
-                    )
+                    logger.info("Daily summary already posted for today.")
             else:
-                logger.info("Daily summary already posted for today.")
-        else:
-            logger.info("Not time for daily summary yet.")
+                logger.info("Not time for daily summary yet.")
 
         # Cleanup old charts to conserve disk space
         cleanup_old_charts()
