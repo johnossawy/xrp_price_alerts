@@ -2,6 +2,7 @@ import tweepy
 import tweepy.errors
 import logging
 import time
+import requests
 
 def get_twitter_client(api_key, api_secret, access_token, access_token_secret):
     """Get Twitter client"""
@@ -20,36 +21,44 @@ def get_twitter_api(api_key, api_secret, access_token, access_token_secret):
     return api
 
 def upload_media(api, filename):
-    """Upload media to Twitter and return media_id"""
+    """Upload media to Twitter using v2 endpoint and return media_id"""
+    url = "https://api.x.com/2/media/upload"
     try:
-        media = api.media_upload(filename=filename)
-        return media.media_id_string
-    except tweepy.TweepyException as e:
-        logging.error(f"Tweepy error during media upload: {e}")
-        return None
-    except Exception as e:
-        logging.error(f"Unexpected error during media upload: {e}")
+        files = {'media': open(filename, 'rb')}
+        headers = {'Authorization': f'Bearer {api.auth.access_token}'}
+        response = requests.post(url, files=files, headers=headers)
+        if response.status_code == 200:
+            media_id = response.json()['media_id']
+            logging.info(f"Media uploaded successfully: {media_id}")
+            return media_id
+        else:
+            logging.error(f"Error uploading media: {response.text}")
+            return None
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error during media upload: {e}")
         return None
 
 def post_tweet(client, tweet_text, media_id=None):
     """Post the tweet using Twitter API v2"""
+    url = "https://api.x.com/2/posts"
     try:
+        payload = {"status": tweet_text}
         if media_id:
-            response = client.create_tweet(text=tweet_text, media_ids=[media_id])
+            payload["media_ids"] = [media_id]
+        
+        headers = {
+            "Authorization": f"Bearer {client.access_token}",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.post(url, json=payload, headers=headers)
+        
+        if response.status_code == 201:
+            logging.info(f"Tweet posted: {tweet_text}")
+            return response.json()
         else:
-            response = client.create_tweet(text=tweet_text)
-        logging.info(f"Tweet posted: {tweet_text}")
-        return response
-    except tweepy.TooManyRequests as e:
-        logging.warning(f"Rate limit reached: {e}. Sleeping for 15 minutes.")
-        time.sleep(900)  # Sleep for 15 minutes
-        return post_tweet(client, tweet_text, media_id)
-    except tweepy.TweepyException as e:
-        # Log detailed error information
-        logging.error(f"Tweepy error occurred: {e}")
-        if e.response:
-            logging.error(f"Response status code: {e.response.status_code}")
-            logging.error(f"Response body: {e.response.text}")
-    except Exception as e:
-        logging.error(f"Unexpected error occurred: {e}")
+            logging.error(f"Error posting tweet: {response.text}")
+            return None
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error during tweet posting: {e}")
     return None
