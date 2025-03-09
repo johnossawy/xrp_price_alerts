@@ -316,7 +316,7 @@ class XRPPriceAlertBot:
                             self.db_handler, full_price, RAPIDAPI_KEY
                         )
                         if summary_text and chart_filename:
-                            media_id = upload_media(self.api, chart_filename)  # No changes needed here, since upload_media is updated
+                            media_id = upload_media(self.api, chart_filename)
                             post_tweet(self.client, summary_text, media_id)
                             logger.info(
                                 f"3-hour summary tweet with chart posted: {summary_text}"
