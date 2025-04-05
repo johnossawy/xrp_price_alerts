@@ -1,4 +1,3 @@
-
 # XRP Price Alerts
 
 This project is a Python-based bot that automatically posts updates to Twitter about the price of XRP (Ripple) every hour. The bot fetches the latest price from an API, compares it to the price from the previous hour and the last 24 hours, and tweets the results.
@@ -21,6 +20,7 @@ This project is a Python-based bot that automatically posts updates to Twitter a
 - Compares the current price with the price from the last hour and the last 24 hours.
 - Posts an update to Twitter every hour, highlighting significant changes in the price.
 - Automatically saves the last posted price for future comparisons.
+- Generates candlestick charts for 3-hour summaries using mplfinance.
 
 ## Setup
 
@@ -68,6 +68,8 @@ Before you begin, ensure you have the following installed:
    LAST_TWEET_FILE=last_tweet.json
    ```
 
+   Note: The RAPIDAPI_KEY is no longer required as we now use mplfinance for chart generation.
+
 5. **Run the bot locally**:
 
    You can manually run the bot to see if everything is set up correctly:
@@ -81,6 +83,7 @@ Before you begin, ensure you have the following installed:
 - The bot automatically fetches the latest XRP price and compares it with the previous hour and the last 24 hours.
 - If a significant change is detected, it posts an update to Twitter.
 - The bot is designed to run continuously and post updates every hour.
+- Every 3 hours, the bot generates a candlestick chart using mplfinance and posts it to Twitter.
 
 ## Deployment on AWS
 
@@ -118,7 +121,8 @@ xrp_price_alerts/
 │   ├── fetcher.py
 │   ├── notifier.py
 │   ├── twitter.py
-│   └── utils.py
+│   ├── utils.py
+│   └── xrp_messaging.py
 ├── config.py
 ├── last_tweet.json
 ├── requirements.txt
@@ -129,6 +133,13 @@ xrp_price_alerts/
 │   └── test_twitter.py
 └── xrppricealerts.py
 ```
+
+## Recent Changes
+
+- Replaced RapidAPI candlestick chart generation with mplfinance
+- Removed dependency on external chart generation service
+- Added direct integration with Binance API for price data
+- Updated requirements.txt to include mplfinance
 
 ## Contributing
 

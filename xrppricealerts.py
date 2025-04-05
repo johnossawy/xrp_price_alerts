@@ -21,7 +21,6 @@ from config import (
     ACCESS_TOKEN_SECRET,
     CONSUMER_KEY,
     CONSUMER_SECRET,
-    RAPIDAPI_KEY,
 )
 from database_handler import DatabaseHandler
 from app.xrp_messaging import cleanup_old_charts  # Import the cleanup function
@@ -313,7 +312,7 @@ class XRPPriceAlertBot:
                     logger.info("3-hour summary condition met. Attempting to generate and post.")
                     try:
                         summary_text, chart_filename = generate_3_hour_summary(
-                            self.db_handler, full_price, RAPIDAPI_KEY
+                            self.db_handler, full_price, None  # No longer passing RAPIDAPI_KEY
                         )
                         if summary_text and chart_filename:
                             media_id = upload_media(self.api, chart_filename)

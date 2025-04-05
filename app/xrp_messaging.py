@@ -8,6 +8,8 @@ from io import BytesIO
 
 from PIL import Image  # Ensure Pillow is installed
 import requests
+import pandas as pd
+import mplfinance as mpf
 
 from app.xrp_logger import log_info
 
@@ -73,7 +75,7 @@ def generate_daily_summary_message(daily_high, daily_low):
     if daily_high is not None and daily_low is not None:
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         return (
-            f"📊 Daily Recap: Today’s $XRP traded between a low of ${daily_low:.5f} and a high of ${daily_high:.5f}.\n"
+            f"📊 Daily Recap: Today's $XRP traded between a low of ${daily_low:.5f} and a high of ${daily_high:.5f}.\n"
             f"What's next for XRP? Stay tuned! 📈💥\n"
             f"Time: {timestamp}\n"
             f"#Ripple #XRP #XRPPriceAlerts"
@@ -81,14 +83,66 @@ def generate_daily_summary_message(daily_high, daily_low):
     return None
 
 
-def generate_3_hour_summary(db_handler, current_price, rapidapi_key):
+def generate_xrp_chart(rapidapi_key=None):
+    """
+    Generate and save the XRP candlestick chart using local data and mplfinance.
+
+    Args:
+        rapidapi_key (str): Not used anymore, kept for backward compatibility.
+
+    Returns:
+        str or None: The filename of the saved chart or None if failed.
+    """
+    try:
+        # Get XRP price data from Binance API
+        url = 'https://api.binance.com/api/v3/klines'
+        params = {'symbol': 'XRPUSDT', 'interval': '15m', 'limit': '16'}
+        
+        response = requests.get(url, params=params)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Convert to DataFrame
+            df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 
+                                             'close_time', 'quote_asset_volume', 'number_of_trades',
+                                             'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
+            
+            # Format data for mplfinance
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+            df = df[['open', 'high', 'low', 'close', 'volume']]
+            df = df.astype(float)
+            
+            # Create and save chart
+            chart_filename = f"xrp_candlestick_chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            
+            mpf.plot(df, type='candle', style='yahoo',
+                    title='XRP/USDT 15-Minute Chart',
+                    ylabel='Price (USDT)',
+                    volume=True,
+                    savefig=chart_filename)
+            
+            logging.info(f"Chart saved as '{chart_filename}'.")
+            return chart_filename
+            
+        else:
+            logging.error(f"Failed to fetch candlestick data: {response.status_code}")
+            logging.error(response.text)
+    except Exception as e:
+        logging.error(f"An error occurred while generating the chart: {type(e).__name__} - {e}")
+
+    return None
+
+
+def generate_3_hour_summary(db_handler, current_price, rapidapi_key=None):
     """
     Generate a 3-hour summary based on the price data stored in the database and save the chart.
 
     Args:
         db_handler (DatabaseHandler): The database handler instance.
         current_price (float): The current price of XRP.
-        rapidapi_key (str): The RapidAPI key for external API calls (if needed).
+        rapidapi_key (str): Not used anymore, kept for backward compatibility.
 
     Returns:
         tuple or (None, None): The summary text and chart filename or (None, None) if failed.
@@ -139,49 +193,6 @@ def generate_3_hour_summary(db_handler, current_price, rapidapi_key):
     except Exception as e:
         logging.error(f"Error generating 3-hour summary: {type(e).__name__} - {e}")
         return None, None
-
-
-def generate_xrp_chart(rapidapi_key):
-    """
-    Generate and save the XRP candlestick chart using the external API.
-
-    Args:
-        rapidapi_key (str): The RapidAPI key for external API calls.
-
-    Returns:
-        str or None: The filename of the saved chart or None if failed.
-    """
-    url = 'https://candlestick-chart.p.rapidapi.com/binance'
-    querystring = {'symbol': 'XRPUSDT', 'interval': '15m', 'limit': '16'}
-    headers = {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'x-rapidapi-host': 'candlestick-chart.p.rapidapi.com',
-        'x-rapidapi-key': rapidapi_key
-    }
-
-    try:
-        response = requests.get(url, headers=headers, params=querystring)
-
-        if response.status_code == 200:
-            data = response.json()
-            base64_image = data.get('chartImage')
-
-            if base64_image:
-                image_data = base64.b64decode(base64_image)
-                image = Image.open(BytesIO(image_data))
-                chart_filename = f"xrp_candlestick_chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                image.save(chart_filename)
-                logging.info(f"Chart saved as '{chart_filename}'.")
-                return chart_filename
-            else:
-                logging.error("No image data found in the response.")
-        else:
-            logging.error(f"Failed to fetch candlestick chart: {response.status_code}")
-            logging.error(response.text)
-    except Exception as e:
-        logging.error(f"An error occurred while generating the chart: {type(e).__name__} - {e}")
-
-    return None
 
 
 def cleanup_old_charts(directory='./', days=1):
