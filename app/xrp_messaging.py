@@ -137,7 +137,6 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             figcolor='#1e1e1e',  # Dark background
             facecolor='#1e1e1e',
             edgecolor='#444444',
-            volume_alpha=0.5,
             rc={
                 'axes.labelcolor': '#FFFFFF',
                 'axes.edgecolor': '#444444',
@@ -149,7 +148,7 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
                 'edge': {'up': '#00FF00', 'down': '#FF0000'},
                 'wick': {'up': '#00FF00', 'down': '#FF0000'},
                 'ohlc': {'up': '#00FF00', 'down': '#FF0000'},
-                'volume': {'up': '#00FF00', 'down': '#FF0000'},
+                'volume': {'up': '#00FF0080', 'down': '#FF000080'},  # Added alpha in hex (80 = 50% opacity)
             }
         )
         
