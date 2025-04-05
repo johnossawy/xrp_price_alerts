@@ -83,52 +83,64 @@ def generate_daily_summary_message(daily_high, daily_low):
     return None
 
 
-def generate_xrp_chart(rapidapi_key=None):
+def generate_xrp_chart(rapidapi_key=None, db_handler=None):
     """
-    Generate and save the XRP candlestick chart using local data and mplfinance.
+    Generate and save the XRP candlestick chart using data from the database.
 
     Args:
         rapidapi_key (str): Not used anymore, kept for backward compatibility.
+        db_handler (DatabaseHandler): The database handler instance.
 
     Returns:
         str or None: The filename of the saved chart or None if failed.
     """
     try:
-        # Get XRP price data from Binance API
-        url = 'https://api.binance.com/api/v3/klines'
-        params = {'symbol': 'XRPUSDT', 'interval': '15m', 'limit': '16'}
+        if db_handler is None:
+            logging.error("Database handler is required for chart generation.")
+            return None
+            
+        # Calculate the time 3 hours ago
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=3)
         
-        response = requests.get(url, params=params)
+        # Query the database for XRP price data in the last 3 hours
+        query = """
+            SELECT timestamp, open_price as open, high_price as high, 
+                   low_price as low, last_price as close, volume
+            FROM crypto_prices
+            WHERE symbol = 'XRP' AND timestamp >= %(start_time)s
+            ORDER BY timestamp ASC;
+        """
+        params = {'start_time': start_time}
+        data = db_handler.fetch_all(query, params)
         
-        if response.status_code == 200:
-            data = response.json()
+        if not data:
+            logging.warning("No XRP data available for the last 3 hours.")
+            return None
             
-            # Convert to DataFrame
-            df = pd.DataFrame(data, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 
-                                             'close_time', 'quote_asset_volume', 'number_of_trades',
-                                             'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
+        # Convert to DataFrame
+        df = pd.DataFrame(data)
+        
+        # Format data for mplfinance
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df.set_index('timestamp', inplace=True)
+        
+        # Ensure numeric types
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # Create and save chart
+        chart_filename = f"xrp_candlestick_chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        
+        mpf.plot(df, type='candle', style='yahoo',
+                title='XRP/USDT 3-Hour Price Movement',
+                ylabel='Price (USDT)',
+                volume=True,
+                savefig=chart_filename)
+        
+        logging.info(f"Chart saved as '{chart_filename}'.")
+        return chart_filename
             
-            # Format data for mplfinance
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-            df.set_index('timestamp', inplace=True)
-            df = df[['open', 'high', 'low', 'close', 'volume']]
-            df = df.astype(float)
-            
-            # Create and save chart
-            chart_filename = f"xrp_candlestick_chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            
-            mpf.plot(df, type='candle', style='yahoo',
-                    title='XRP/USDT 15-Minute Chart',
-                    ylabel='Price (USDT)',
-                    volume=True,
-                    savefig=chart_filename)
-            
-            logging.info(f"Chart saved as '{chart_filename}'.")
-            return chart_filename
-            
-        else:
-            logging.error(f"Failed to fetch candlestick data: {response.status_code}")
-            logging.error(response.text)
     except Exception as e:
         logging.error(f"An error occurred while generating the chart: {type(e).__name__} - {e}")
 
@@ -185,8 +197,8 @@ def generate_3_hour_summary(db_handler, current_price, rapidapi_key=None):
             f"#Ripple #XRP #XRPPriceAlerts"
         )
 
-        # Generate the chart
-        chart_filename = generate_xrp_chart(rapidapi_key)
+        # Generate the chart using data from the database
+        chart_filename = generate_xrp_chart(rapidapi_key, db_handler)
 
         return summary_text, chart_filename
 

@@ -20,7 +20,7 @@ This project is a Python-based bot that automatically posts updates to Twitter a
 - Compares the current price with the price from the last hour and the last 24 hours.
 - Posts an update to Twitter every hour, highlighting significant changes in the price.
 - Automatically saves the last posted price for future comparisons.
-- Generates candlestick charts for 3-hour summaries using mplfinance.
+- Generates candlestick charts for 3-hour summaries using mplfinance and data from the database.
 
 ## Setup
 
@@ -33,6 +33,7 @@ Before you begin, ensure you have the following installed:
 - Git (optional, if you want to clone from a repository)
 - An AWS account (for deployment)
 - Twitter Developer Account and API keys
+- PostgreSQL database (for storing price data)
 
 ### Installation
 
@@ -66,9 +67,12 @@ Before you begin, ensure you have the following installed:
    ACCESS_TOKEN=your-access-token
    ACCESS_TOKEN_SECRET=your-access-token-secret
    LAST_TWEET_FILE=last_tweet.json
+   DB_HOST=your-db-host
+   DB_PORT=your-db-port
+   DB_NAME=your-db-name
+   DB_USER=your-db-user
+   DB_PASSWORD=your-db-password
    ```
-
-   Note: The RAPIDAPI_KEY is no longer required as we now use mplfinance for chart generation.
 
 5. **Run the bot locally**:
 
@@ -83,7 +87,7 @@ Before you begin, ensure you have the following installed:
 - The bot automatically fetches the latest XRP price and compares it with the previous hour and the last 24 hours.
 - If a significant change is detected, it posts an update to Twitter.
 - The bot is designed to run continuously and post updates every hour.
-- Every 3 hours, the bot generates a candlestick chart using mplfinance and posts it to Twitter.
+- Every 3 hours, the bot generates a candlestick chart using mplfinance and data from the database, then posts it to Twitter.
 
 ## Deployment on AWS
 
@@ -138,7 +142,7 @@ xrp_price_alerts/
 
 - Replaced RapidAPI candlestick chart generation with mplfinance
 - Removed dependency on external chart generation service
-- Added direct integration with Binance API for price data
+- Now using database data for chart generation instead of external APIs
 - Updated requirements.txt to include mplfinance
 
 ## Contributing
