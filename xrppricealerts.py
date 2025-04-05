@@ -54,7 +54,7 @@ class XRPPriceAlertBot:
             (6, 0),
             (9, 0),
             (12, 0),
-            (15, 0),
+            (13, 0),
             (18, 0),
             (21, 0),
         }  # Hours to post 3-hour summary tweets

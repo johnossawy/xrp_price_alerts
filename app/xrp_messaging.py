@@ -10,6 +10,7 @@ from PIL import Image  # Ensure Pillow is installed
 import requests
 import pandas as pd
 import mplfinance as mpf
+import matplotlib.pyplot as plt
 
 from app.xrp_logger import log_info
 
@@ -129,14 +130,60 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
         for col in ['open', 'high', 'low', 'close', 'volume']:
             df[col] = pd.to_numeric(df[col], errors='coerce')
         
+        # Create custom dark style
+        dark_style = mpf.make_mpf_style(
+            base_mpf_style='nightclouds',  # Dark theme base
+            gridstyle='',  # Remove grid
+            figcolor='#1e1e1e',  # Dark background
+            facecolor='#1e1e1e',
+            edgecolor='#444444',
+            volume_alpha=0.5,
+            rc={
+                'axes.labelcolor': '#FFFFFF',
+                'axes.edgecolor': '#444444',
+                'xtick.color': '#FFFFFF',
+                'ytick.color': '#FFFFFF'
+            },
+            marketcolors={
+                'candle': {'up': '#00FF00', 'down': '#FF0000'},
+                'edge': {'up': '#00FF00', 'down': '#FF0000'},
+                'wick': {'up': '#00FF00', 'down': '#FF0000'},
+                'ohlc': {'up': '#00FF00', 'down': '#FF0000'},
+                'volume': {'up': '#00FF00', 'down': '#FF0000'},
+            }
+        )
+        
         # Create and save chart
         chart_filename = f"xrp_candlestick_chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         
-        mpf.plot(df, type='candle', style='yahoo',
-                title='XRP/USDT 3-Hour Price Movement',
-                ylabel='Price (USDT)',
-                volume=True,
-                savefig=chart_filename)
+        # Create the figure with a specific size and dark background
+        fig, axlist = mpf.plot(
+            df,
+            type='candle',
+            style=dark_style,
+            title='XRP/USDT 3-Hour Price Movement',
+            ylabel='Price (USDT)',
+            volume=True,
+            figsize=(12, 8),
+            panel_ratios=(3, 1),  # Ratio between price and volume panels
+            returnfig=True
+        )
+        
+        # Set the figure background to dark
+        fig.patch.set_facecolor('#1e1e1e')
+        
+        # Add title with white color
+        axlist[0].set_title('XRP/USDT 3-Hour Price Movement', color='white', pad=20)
+        
+        # Save the figure with dark background
+        fig.savefig(
+            chart_filename,
+            facecolor='#1e1e1e',
+            edgecolor='#1e1e1e',
+            bbox_inches='tight',
+            dpi=100
+        )
+        plt.close(fig)
         
         logging.info(f"Chart saved as '{chart_filename}'.")
         return chart_filename
