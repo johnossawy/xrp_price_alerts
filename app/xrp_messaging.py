@@ -98,11 +98,11 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
         if db_handler is None:
             logging.error("Database handler is required for chart generation.")
             return None
-            
+
         # Calculate the time 3 hours ago
         end_time = datetime.now()
-        start_time = end_time - timedelta(hours=4)
-        
+        start_time = end_time - timedelta(hours=3)
+
         # Query the database for XRP price data in the last 3 hours
         query = """
             SELECT timestamp, last_price, volume
@@ -127,16 +127,28 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
         df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
 
         # 🎯 Proper OHLC construction (based on real price action)
-        ohlc = df['price'].resample('15T').ohlc()
-        ohlc['volume'] = df['volume'].resample('15T').sum()
+        ohlc = df['price'].resample('15min').ohlc()
+        ohlc['volume'] = df['volume'].resample('15min').sum()
         ohlc.dropna(inplace=True)
+
+        # 📈 Calculate Moving Averages
+        ohlc['SMA_5'] = ohlc['close'].rolling(window=5).mean()
+        ohlc['EMA_21'] = ohlc['close'].ewm(span=21, adjust=False).mean()
+
+        # 🟠 Overlay EMA as a custom addplot
+        ema_21_plot = mpf.make_addplot(
+            ohlc['EMA_21'],
+            color='orange',
+            width=1.2,
+            linestyle='--'
+        )
 
         # Create and save chart
         chart_filename = f"xrp_candlestick_chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
 
-        # Define a custom dark style similar to your old chart
+        # 🎨 Custom dark style
         custom_style = mpf.make_mpf_style(
-            base_mpf_style='nightclouds',  # Great dark mode base
+            base_mpf_style='nightclouds',
             rc={
                 "axes.labelcolor": "white",
                 "xtick.color": "white",
@@ -152,20 +164,22 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             )
         )
 
-        # Plot the proper candlestick chart
+        # 🧠 Plot with SMA-5 + EMA-21 overlay
         mpf.plot(
             ohlc,
             type='candle',
             style=custom_style,
             title='XRP/USDT 3-Hour Price Movement',
             ylabel='Price (USDT)',
-            volume=False,
+            volume=True,
+            mav=(5,),                # SMA-5 (you can add more like (5, 21) here too)
+            addplot=[ema_21_plot],   # Custom EMA overlay
             savefig=chart_filename
         )
 
         logging.info(f"Chart saved as '{chart_filename}'.")
         return chart_filename
-            
+
     except Exception as e:
         logging.error(f"An error occurred while generating the chart: {type(e).__name__} - {e}")
 
