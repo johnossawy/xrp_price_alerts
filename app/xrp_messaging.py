@@ -187,7 +187,7 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             style=custom_style,
             title='XRP/USDT 3-Hour Price Movement',
             ylabel='Price (USDT)',
-            volume=True,
+            volume=False,
             addplot=[sma_5_plot, ema_21_plot],  # Both overlays added manually
             returnfig=True
         )
