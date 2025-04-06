@@ -124,7 +124,16 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
         # Format data for mplfinance
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         df.set_index('timestamp', inplace=True)
-        
+
+        # Resample into 5-minute candles to avoid overplotting
+        df = df.resample('15T').agg({
+            'open': 'first',
+            'high': 'max',
+            'low': 'min',
+            'close': 'last',
+            'volume': 'sum'
+        }).dropna()
+
         # Ensure numeric types
         for col in ['open', 'high', 'low', 'close', 'volume']:
             df[col] = pd.to_numeric(df[col], errors='coerce')
