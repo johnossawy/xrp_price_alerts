@@ -165,22 +165,41 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             )
         )
 
-        # 🧠 Plot with manual control so we can inject legend + watermark
+        # 🔹 Manually create both overlays for full control
+        sma_5_plot = mpf.make_addplot(
+            ohlc['SMA_5'],
+            color='cyan',
+            width=1.2,
+            linestyle='-'
+        )
+
+        ema_21_plot = mpf.make_addplot(
+            ohlc['EMA_21'],
+            color='orange',
+            width=1.2,
+            linestyle='--'
+        )
+
+        # 🧠 Plot with full matplotlib access
         fig, axlist = mpf.plot(
             ohlc,
             type='candle',
             style=custom_style,
             title='XRP/USDT 3-Hour Price Movement',
             ylabel='Price (USDT)',
-            volume=False,
-            mav=(5,),                      # SMA-5 (cyan by default)
-            addplot=[ema_21_plot],         # EMA-21 (orange dashed)
-            returnfig=True                 # 👈 so we can add legend + watermark manually
+            volume=True,
+            addplot=[sma_5_plot, ema_21_plot],  # Both overlays added manually
+            returnfig=True
         )
 
-        # 🎯 Add custom legend to top-left
-        price_ax = axlist[0]  # Main price plot axis
+        # 🎯 Get the plot handles for legend
+        price_ax = axlist[0]
+        sma_line = price_ax.lines[-2]  # Second last added line (SMA-5)
+        ema_line = price_ax.lines[-1]  # Last added line (EMA-21)
+
+        # 🏷️ Add accurate legend with correct colour + style
         price_ax.legend(
+            [sma_line, ema_line],
             ['SMA-5 (cyan)', 'EMA-21 (orange dashed)'],
             loc='upper left',
             fontsize=8,
@@ -189,9 +208,9 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             edgecolor='white'
         )
 
-        # 🔏 Add watermark in bottom-right
+        # 💧 Add watermark
         price_ax.text(
-            1.0, -0.12,                    # x, y position (in axes coords, not data)
+            1.0, -0.12,
             '@xrppricealerts',
             transform=price_ax.transAxes,
             ha='right',
@@ -200,9 +219,10 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             color='gray',
             alpha=0.7
         )
-        # 💾 Save the figure
+
+        # 💾 Save chart
         fig.savefig(chart_filename, bbox_inches='tight')
-        plt.close(fig)  # Optional: close to prevent memory buildup in long-running scripts
+        plt.close(fig)
 
         logging.info(f"Chart saved as '{chart_filename}'.")
         return chart_filename
