@@ -132,11 +132,32 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
         # Create and save chart
         chart_filename = f"xrp_candlestick_chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         
-        mpf.plot(df, type='candle', style='yahoo',
-                title='XRP/USDT 3-Hour Price Movement',
-                ylabel='Price (USDT)',
-                volume=True,
-                savefig=chart_filename)
+        # Define a custom dark style similar to your old chart
+        custom_style = mpf.make_mpf_style(
+            base_mpf_style='nightclouds',  # Great dark mode base
+            rc={
+                "axes.labelcolor": "white",
+                "xtick.color": "white",
+                "ytick.color": "white",
+            },
+            marketcolors=mpf.make_marketcolors(
+                up='green',
+                down='red',
+                edge='inherit',
+                wick='inherit',
+                volume='inherit',
+                ohlc='inherit',
+            )
+        )
+        mpf.plot(
+            df,
+            type='candle',
+            style=custom_style,
+            title='XRP/USDT 3-Hour Price Movement',
+            ylabel='Price (USDT)',
+            volume=True,
+            savefig=chart_filename
+        )
         
         logging.info(f"Chart saved as '{chart_filename}'.")
         return chart_filename
