@@ -101,7 +101,7 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             
         # Calculate the time 3 hours ago
         end_time = datetime.now()
-        start_time = end_time - timedelta(hours=3)
+        start_time = end_time - timedelta(hours=4)
         
         # Query the database for XRP price data in the last 3 hours
         query = """
@@ -164,7 +164,7 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             style=custom_style,
             title='XRP/USDT 3-Hour Price Movement',
             ylabel='Price (USDT)',
-            volume=True,
+            volume=False,
             savefig=chart_filename
         )
         
