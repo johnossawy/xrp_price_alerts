@@ -127,8 +127,8 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
         df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
 
         # 🎯 Proper OHLC construction (based on real price action)
-        ohlc = df['price'].resample('5T').ohlc()
-        ohlc['volume'] = df['volume'].resample('5T').sum()
+        ohlc = df['price'].resample('15T').ohlc()
+        ohlc['volume'] = df['volume'].resample('15T').sum()
         ohlc.dropna(inplace=True)
 
         # Create and save chart
@@ -159,7 +159,7 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             style=custom_style,
             title='XRP/USDT 3-Hour Price Movement',
             ylabel='Price (USDT)',
-            volume=True,
+            volume=False,
             savefig=chart_filename
         )
 
