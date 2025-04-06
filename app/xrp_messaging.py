@@ -105,42 +105,35 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
         
         # Query the database for XRP price data in the last 3 hours
         query = """
-            SELECT timestamp, open_price as open, high_price as high, 
-                   low_price as low, last_price as close, volume
+            SELECT timestamp, last_price, volume
             FROM crypto_prices
             WHERE symbol = 'XRP' AND timestamp >= %(start_time)s
             ORDER BY timestamp ASC;
         """
         params = {'start_time': start_time}
         data = db_handler.fetch_all(query, params)
-        
+
         if not data:
             logging.warning("No XRP data available for the last 3 hours.")
             return None
-            
+
         # Convert to DataFrame
         df = pd.DataFrame(data)
-        
-        # Format data for mplfinance
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         df.set_index('timestamp', inplace=True)
 
-        # Resample into 5-minute candles to avoid overplotting
-        df = df.resample('15T').agg({
-            'open': 'first',
-            'high': 'max',
-            'low': 'min',
-            'close': 'last',
-            'volume': 'sum'
-        }).dropna()
+        # Use last_price for OHLC resampling
+        df['price'] = pd.to_numeric(df['last_price'], errors='coerce')
+        df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
 
-        # Ensure numeric types
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        
+        # 🎯 Proper OHLC construction (based on real price action)
+        ohlc = df['price'].resample('5T').ohlc()
+        ohlc['volume'] = df['volume'].resample('5T').sum()
+        ohlc.dropna(inplace=True)
+
         # Create and save chart
         chart_filename = f"xrp_candlestick_chart_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        
+
         # Define a custom dark style similar to your old chart
         custom_style = mpf.make_mpf_style(
             base_mpf_style='nightclouds',  # Great dark mode base
@@ -158,16 +151,18 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
                 ohlc='inherit',
             )
         )
+
+        # Plot the proper candlestick chart
         mpf.plot(
-            df,
+            ohlc,
             type='candle',
             style=custom_style,
             title='XRP/USDT 3-Hour Price Movement',
             ylabel='Price (USDT)',
-            volume=False,
+            volume=True,
             savefig=chart_filename
         )
-        
+
         logging.info(f"Chart saved as '{chart_filename}'.")
         return chart_filename
             
@@ -175,7 +170,6 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
         logging.error(f"An error occurred while generating the chart: {type(e).__name__} - {e}")
 
     return None
-
 
 def generate_3_hour_summary(db_handler, current_price, rapidapi_key=None):
     """
