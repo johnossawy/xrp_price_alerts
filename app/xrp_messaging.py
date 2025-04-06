@@ -172,7 +172,7 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             style=custom_style,
             title='XRP/USDT 3-Hour Price Movement',
             ylabel='Price (USDT)',
-            volume=True,
+            volume=False,
             mav=(5,),                      # SMA-5 (cyan by default)
             addplot=[ema_21_plot],         # EMA-21 (orange dashed)
             returnfig=True                 # 👈 so we can add legend + watermark manually
