@@ -10,6 +10,7 @@ from PIL import Image  # Ensure Pillow is installed
 import requests
 import pandas as pd
 import mplfinance as mpf
+import matplotlib.pyplot as plt
 
 from app.xrp_logger import log_info
 
@@ -164,18 +165,44 @@ def generate_xrp_chart(rapidapi_key=None, db_handler=None):
             )
         )
 
-        # 🧠 Plot with SMA-5 + EMA-21 overlay
-        mpf.plot(
+        # 🧠 Plot with manual control so we can inject legend + watermark
+        fig, axlist = mpf.plot(
             ohlc,
             type='candle',
             style=custom_style,
             title='XRP/USDT 3-Hour Price Movement',
             ylabel='Price (USDT)',
-            volume=False,
-            mav=(5,),                # SMA-5 (you can add more like (5, 21) here too)
-            addplot=[ema_21_plot],   # Custom EMA overlay
-            savefig=chart_filename
+            volume=True,
+            mav=(5,),                      # SMA-5 (cyan by default)
+            addplot=[ema_21_plot],         # EMA-21 (orange dashed)
+            returnfig=True                 # 👈 so we can add legend + watermark manually
         )
+
+        # 🎯 Add custom legend to top-left
+        price_ax = axlist[0]  # Main price plot axis
+        price_ax.legend(
+            ['SMA-5 (cyan)', 'EMA-21 (orange dashed)'],
+            loc='upper left',
+            fontsize=8,
+            facecolor='#111111',
+            labelcolor='white',
+            edgecolor='white'
+        )
+
+        # 🔏 Add watermark in bottom-right
+        price_ax.text(
+            1.0, -0.12,                    # x, y position (in axes coords, not data)
+            '@xrppricealerts',
+            transform=price_ax.transAxes,
+            ha='right',
+            va='top',
+            fontsize=8,
+            color='gray',
+            alpha=0.7
+        )
+        # 💾 Save the figure
+        fig.savefig(chart_filename, bbox_inches='tight')
+        plt.close(fig)  # Optional: close to prevent memory buildup in long-running scripts
 
         logging.info(f"Chart saved as '{chart_filename}'.")
         return chart_filename
