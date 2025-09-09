@@ -6,3 +6,5 @@ venv/
 archive/
 .DS_Store
 config.py
+GEMINI.md
+AGENTS.md
